@@ -1,10 +1,17 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, Request } from '@nestjs/common';
 import { AppService, JobCard, SpareItem, ServiceItem } from './app.service';
+import { AuthService } from './auth/auth.service';
+import { Public } from './auth/public.decorator';
+import { Roles } from './auth/roles.decorator';
 
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(
+    private readonly appService: AppService,
+    private readonly authService: AuthService,
+  ) {}
 
+  @Public()
   @Get()
   getHello(): string {
     return this.appService.getHello();
@@ -141,9 +148,15 @@ export class AppController {
   // AUTHENTICATION & SESSION MANAGEMENT
   // ============================================================
 
+  @Public()
   @Post('auth/login')
-  login(@Body() credentials: any) {
-    return this.appService.validateLogin(credentials);
+  login(@Body() body: { username: string; password: string }) {
+    return this.authService.login(body.username, body.password);
+  }
+
+  @Get('auth/me')
+  getMe(@Request() req: { user: { name: string; role: string; username: string; garageCode: string } }) {
+    return { user: req.user };
   }
 
   // ============================================================

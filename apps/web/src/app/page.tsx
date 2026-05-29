@@ -369,13 +369,22 @@ export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
+  const [currentUser, setCurrentUser] = useState<{
+    id: string; name: string; username: string; role: string; garageCode: string; token: string;
+  } | null>(null);
 
-  // Sync auth state with localStorage safely
+  // Restore session from localStorage on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const savedAuth = localStorage.getItem("bikemaster_auth");
-      if (savedAuth === "true") {
-        setIsLoggedIn(true);
+      const saved = localStorage.getItem("bikemaster_session");
+      if (saved) {
+        try {
+          const session = JSON.parse(saved);
+          setCurrentUser(session);
+          setIsLoggedIn(true);
+        } catch {
+          localStorage.removeItem("bikemaster_session");
+        }
       }
     }
   }, []);
@@ -1618,56 +1627,95 @@ export default function Home() {
   // AUTHENTICATION LOGIN & LOGOUT HANDLERS
   // -------------------------------------------------------------
 
+  // Role → allowed nav tabs
+  const ROLE_TABS: Record<string, string[]> = {
+    super_admin:     ["*"],
+    org_admin:       ["*"],
+    garage_manager:  ["*"],
+    service_advisor: ["Dashboard","Service Queue","Customers","CRM","Inventory Management","View Service History"],
+    technician:      ["Dashboard","Service Queue"],
+    cashier:         ["Dashboard","Service Queue","Payments","Report By Invoices"],
+    viewer:          ["Dashboard","BI Analytics","GST Filing Reports","By Insurance Claim","Report By Invoices"],
+  };
+
+  const canAccessTab = (tab: string) => {
+    if (!currentUser) return false;
+    const allowed = ROLE_TABS[currentUser.role] ?? [];
+    if (allowed.includes("*")) return true;
+    return allowed.includes(tab);
+  };
+
+  // Role display label
+  const ROLE_LABELS: Record<string, string> = {
+    super_admin:    "Super Admin",
+    org_admin:      "Org Admin",
+    garage_manager: "Garage Manager",
+    service_advisor:"Service Advisor",
+    technician:     "Technician",
+    cashier:        "Cashier",
+    viewer:         "Viewer",
+  };
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!usernameInput || !passwordInput) {
       triggerToast("Please enter both username and password!", "warn");
       return;
     }
-    
+
+    // Offline fallback users (mirrors API DEMO_USERS)
+    const FALLBACK_USERS = [
+      { username: "admin",   password: "admin123",   role: "super_admin",    name: "Aditya Pradhan", id: "u1", garageCode: "BBR-001" },
+      { username: "manager", password: "manager123", role: "garage_manager", name: "Subhashis Sen",  id: "u2", garageCode: "BBR-001" },
+      { username: "advisor", password: "advisor123", role: "service_advisor",name: "Priya Sharma",   id: "u3", garageCode: "BBR-001" },
+      { username: "tech",    password: "tech123",    role: "technician",     name: "Ravi Kumar",     id: "u4", garageCode: "BBR-001" },
+      { username: "cashier", password: "cashier123", role: "cashier",        name: "Anita Das",      id: "u5", garageCode: "BBR-001" },
+    ];
+
+    const saveSession = (user: typeof FALLBACK_USERS[0], token: string) => {
+      const session = { ...user, token };
+      setCurrentUser(session);
+      setIsLoggedIn(true);
+      localStorage.setItem("bikemaster_session", JSON.stringify(session));
+      // Set first allowed tab for this role
+      const allowed = ROLE_TABS[user.role] ?? [];
+      if (!allowed.includes("*") && allowed.length > 0) setActiveTab(allowed[0]);
+    };
+
     try {
       const res = await fetch("http://localhost:4000/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: usernameInput, password: passwordInput })
+        body: JSON.stringify({ username: usernameInput, password: passwordInput }),
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.success) {
-          setIsLoggedIn(true);
-          localStorage.setItem("bikemaster_auth", "true");
-          triggerToast(`Welcome back, ${data.user.name}!`, "success");
-        } else {
-          triggerToast(data.message, "warn");
-        }
+        saveSession(data.user, data.access_token);
+        triggerToast(`Welcome back, ${data.user.name}!`, "success");
       } else {
-        // Local fallback in case NestJS backend is offline
-        if (usernameInput === "admin" && passwordInput === "password123") {
-          setIsLoggedIn(true);
-          localStorage.setItem("bikemaster_auth", "true");
-          triggerToast("Logged in successfully (local offline fallback)!", "success");
-        } else {
-          triggerToast("Invalid credentials! Use admin / password123", "warn");
-        }
+        triggerToast("Invalid username or password.", "warn");
       }
-    } catch (err) {
-      // Local fallback in case of connection error
-      if (usernameInput === "admin" && passwordInput === "password123") {
-        setIsLoggedIn(true);
-        localStorage.setItem("bikemaster_auth", "true");
-        triggerToast("Logged in successfully (local offline fallback)!", "success");
+    } catch {
+      // Backend offline — use local fallback
+      const match = FALLBACK_USERS.find(
+        (u) => u.username === usernameInput && u.password === passwordInput,
+      );
+      if (match) {
+        saveSession(match, "offline-token");
+        triggerToast(`Welcome back, ${match.name}! (Offline mode)`, "success");
       } else {
-        triggerToast("Invalid credentials! Use admin / password123", "warn");
+        triggerToast("Invalid credentials.", "warn");
       }
     }
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
-    localStorage.removeItem("bikemaster_auth");
+    setCurrentUser(null);
+    localStorage.removeItem("bikemaster_session");
     setUsernameInput("");
     setPasswordInput("");
-    triggerToast("Logged out successfully!", "info");
+    triggerToast("Logged out successfully.", "info");
   };
 
   // -------------------------------------------------------------
@@ -4036,9 +4084,17 @@ export default function Home() {
                     { name: "View Logs", icon: Clock }
                   ]
                 }
-              ].map((item) => {
+              ].filter((item) => {
+                // For expandable groups, show if ANY sub-item is accessible
                 if (item.isExpandable) {
-                  const isChildActive = item.subItems.some((s: any) => activeTab === s.name);
+                  return item.subItems.some((s: { name: string }) => canAccessTab(s.name));
+                }
+                return canAccessTab(item.name);
+              }).map((item) => {
+                if (item.isExpandable) {
+                  // Also filter sub-items themselves
+                  item = { ...item, subItems: item.subItems.filter((s: { name: string }) => canAccessTab(s.name)) };
+                  const isChildActive = item.subItems.some((s: { name: string }) => activeTab === s.name);
                   return (
                     <div key={item.name} className="space-y-1">
                       <button
@@ -4136,8 +4192,8 @@ export default function Home() {
             <div className="p-3 border-t border-slate-200 dark:border-slate-700 font-sans">
               {sidebarCollapsed ? (
                 <div className="flex flex-col items-center space-y-2">
-                  <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-green-600 to-emerald-500 dark:from-green-500 dark:to-teal-400 flex items-center justify-center text-white font-extrabold text-xs shadow-md shadow-green-500/10" title="Aditya Pradhan (Super Admin)">
-                    AP
+                  <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-green-600 to-emerald-500 dark:from-green-500 dark:to-teal-400 flex items-center justify-center text-white font-extrabold text-xs shadow-md shadow-green-500/10" title={`${currentUser?.name} (${ROLE_LABELS[currentUser?.role ?? ""]})`}>
+                    {currentUser?.name.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase() ?? "??"}
                   </div>
                   <button
                     onClick={handleLogout}
@@ -4151,11 +4207,11 @@ export default function Home() {
                 <div className="flex items-center justify-between w-full">
                   <div className="flex items-center space-x-2">
                     <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-green-600 to-emerald-500 dark:from-green-500 dark:to-teal-400 flex items-center justify-center text-white font-extrabold text-xs shadow-md shadow-green-500/10">
-                      AP
+                      {currentUser?.name.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase() ?? "??"}
                     </div>
                     <div className="flex flex-col items-start leading-none">
-                      <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200">Aditya Pradhan</span>
-                      <span className="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5 uppercase tracking-wider font-bold">Super Admin</span>
+                      <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200">{currentUser?.name ?? "—"}</span>
+                      <span className="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5 uppercase tracking-wider font-bold">{ROLE_LABELS[currentUser?.role ?? ""] ?? "—"}</span>
                     </div>
                   </div>
                   <button
