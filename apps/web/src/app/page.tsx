@@ -336,7 +336,7 @@ const INITIAL_JOBS = [
 export default function Home() {
   const router = useRouter();
   const [jobs, setJobs] = useState(INITIAL_JOBS);
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState("light");
   const [mounted, setMounted] = useState(false);
 
   // Read theme from localStorage on initial client mount
@@ -4170,8 +4170,8 @@ export default function Home() {
 
             {/* Copyright */}
             {!sidebarCollapsed && (
-              <div className="px-3 pb-3 text-center">
-                <p className="text-[9px] text-slate-400 dark:text-slate-600 leading-relaxed">
+              <div className="px-3 pt-1 pb-2 text-center border-t border-slate-100 dark:border-slate-700/50">
+                <p className="text-[9px] text-slate-400 dark:text-slate-600 leading-snug">
                   Powered by <span className="font-bold text-slate-500 dark:text-slate-500">LeOmm Labs</span><br />
                   &copy; Copyright LeOmm Labs 2026. All rights reserved.
                 </p>
