@@ -21,7 +21,7 @@ import {
   TrendingUp,
   Tag,
   Briefcase,
-  Sliders,
+  Menu,
   AlertCircle,
   ShieldAlert,
   ChevronRight,
@@ -3870,7 +3870,7 @@ export default function Home() {
                 className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-all mr-1.5 active:scale-95"
                 title="Toggle Sidebar"
               >
-                <Sliders className={`h-4 w-4 transform transition-transform duration-300 ${sidebarCollapsed ? "rotate-90" : ""}`} />
+                <Menu className="h-4 w-4" />
               </button>
               <div className="bg-green-600 dark:bg-green-500 p-2.5 rounded-xl text-white shadow-md shadow-green-600/10 flex items-center justify-center transform hover:rotate-12 transition-transform duration-300">
                 <Wrench className="h-5 w-5" />
@@ -3941,11 +3941,6 @@ export default function Home() {
               >
                 {theme === "dark" ? <Sun className="h-5 w-5 text-amber-500" /> : <Moon className="h-5 w-5 text-indigo-600" />}
               </button>
-
-              {/* Copyright */}
-              <span className="hidden lg:block text-[9px] text-slate-400 dark:text-slate-600 leading-snug text-right">
-                &copy; BikeMaster 2026
-              </span>
 
               {/* "NEW CUSTOMER REGISTRATION" Green Button */}
               <button
@@ -8785,6 +8780,18 @@ export default function Home() {
             </div>
           ))}
         </div>
+
+        {/* ============================================================ */}
+        {/* FOOTER */}
+        {/* ============================================================ */}
+        <footer className="shrink-0 h-8 px-5 flex items-center justify-between border-t border-slate-200 dark:border-slate-700/80 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+            Powered by <span className="font-bold text-slate-500 dark:text-slate-400">LeOmm Labs</span>
+          </span>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+            &copy; BikeMaster 2026. All rights reserved.
+          </span>
+        </footer>
 
       </div>
     </div>
