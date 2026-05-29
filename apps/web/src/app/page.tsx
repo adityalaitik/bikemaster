@@ -22,6 +22,7 @@ import {
   Tag,
   Briefcase,
   Menu,
+  Sliders,
   AlertCircle,
   ShieldAlert,
   ChevronRight,
@@ -3192,7 +3193,7 @@ export default function Home() {
                   <CreditCard className="h-6 w-6" />
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Today's Revenue</span>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Today&apos;s Revenue</span>
                   <span className="text-sm font-black text-indigo-650 dark:text-indigo-400">₹34,250.00</span>
                 </div>
               </div>
@@ -7170,7 +7171,7 @@ export default function Home() {
                 <button onClick={() => setIsPlateInfoModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white"><X className="h-4 w-4" /></button>
               </div>
               <div className="p-6 space-y-4 text-xs text-slate-600 dark:text-slate-300">
-                <p className="leading-relaxed">In India, the color combination of a vehicle's number plate signifies the vehicle's usage type and fuel configuration. Here is the operational context:</p>
+                <p className="leading-relaxed">In India, the color combination of a vehicle&apos;s number plate signifies the vehicle&apos;s usage type and fuel configuration. Here is the operational context:</p>
                 <div className="grid grid-cols-1 gap-3">
                   <div className="flex items-center space-x-3 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-900/20">
                     <span className="h-6 w-14 rounded border border-slate-300 bg-white text-slate-900 font-mono text-[9px] font-black text-center pt-1 shadow-sm shrink-0">OD-05</span>
