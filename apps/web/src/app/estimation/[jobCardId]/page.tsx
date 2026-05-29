@@ -1473,7 +1473,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
               {/* Footer */}
               <div className="text-center pt-8 border-t border-slate-100">
                 <h5 className="font-black tracking-widest text-slate-700 text-xs">THANK YOU FOR YOUR VISIT</h5>
-                <p className="text-[9px] text-slate-400 mt-1 uppercase font-bold">Powered by RAMP WMS Suite</p>
+                <p className="text-[9px] text-slate-400 mt-1 font-bold">Powered by LeOmm Labs &nbsp;|&nbsp; &copy; Copyright LeOmm Labs 2026. All rights reserved.</p>
               </div>
 
             </div>
