@@ -528,6 +528,138 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
     }
   };
 
+  // Opens a clean isolated window containing only the invoice HTML and prints it.
+  // This avoids every CSS-isolation problem (blank pages, repeated fixed elements,
+  // browser URL headers) that come with calling window.print() from inside a modal.
+  const printInvoice = () => {
+    const area = document.getElementById("invoice-print-area");
+    if (!area) return;
+
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) return;
+
+    win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Invoice</title>
+  <style>
+    @page { size: A4; margin: 1cm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 10pt;
+      color: #0f172a;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }
+    .space-y-6 > * + * { margin-top: 1.5rem; }
+    .space-y-4 > * + * { margin-top: 1rem; }
+    .space-y-2 > * + * { margin-top: 0.5rem; }
+    .space-y-1\\.5 > * + * { margin-top: 0.375rem; }
+    .space-y-1 > * + * { margin-top: 0.25rem; }
+    .flex { display: flex; }
+    .items-start { align-items: flex-start; }
+    .items-center { align-items: center; }
+    .items-end { align-items: flex-end; }
+    .justify-between { justify-content: space-between; }
+    .justify-end { justify-content: flex-end; }
+    .space-x-3 > * + * { margin-left: 0.75rem; }
+    .grid { display: grid; }
+    .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .gap-6 { gap: 1.5rem; }
+    .gap-8 { gap: 2rem; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+    .text-left { text-align: left; }
+    .font-bold { font-weight: 700; }
+    .font-extrabold { font-weight: 800; }
+    .font-black { font-weight: 900; }
+    .italic { font-style: italic; }
+    .uppercase { text-transform: uppercase; }
+    .tracking-wide { letter-spacing: 0.025em; }
+    .tracking-wider { letter-spacing: 0.05em; }
+    .tracking-widest { letter-spacing: 0.1em; }
+    .leading-relaxed { line-height: 1.625; }
+    .leading-normal { line-height: 1.5; }
+    .w-full { width: 100%; }
+    .max-w-\\[320px\\] { max-width: 320px; }
+    .ml-auto { margin-left: auto; }
+    .w-28 { width: 7rem; }
+    .w-36 { width: 9rem; }
+    .pt-1 { padding-top: 0.25rem; }
+    .pt-2 { padding-top: 0.5rem; }
+    .pt-4 { padding-top: 1rem; }
+    .pt-8 { padding-top: 2rem; }
+    .pb-1 { padding-bottom: 0.25rem; }
+    .pb-4 { padding-bottom: 1rem; }
+    .p-3 { padding: 0.75rem; }
+    .p-4 { padding: 1rem; }
+    .px-2\\.5 { padding-left: 0.625rem; padding-right: 0.625rem; }
+    .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+    .mt-1 { margin-top: 0.25rem; }
+    .mt-0\\.5 { margin-top: 0.125rem; }
+    .overflow-x-auto { overflow-x: auto; }
+    /* Colours */
+    .text-slate-900 { color: #0f172a; }
+    .text-slate-850 { color: #1a2332; }
+    .text-slate-800 { color: #1e293b; }
+    .text-slate-750 { color: #263345; }
+    .text-slate-700 { color: #334155; }
+    .text-slate-600 { color: #475569; }
+    .text-slate-500 { color: #64748b; }
+    .text-slate-400 { color: #94a3b8; }
+    .text-green-600 { color: #16a34a; }
+    .text-white { color: #ffffff; }
+    .bg-white { background-color: #ffffff; }
+    .bg-slate-50 { background-color: #f8fafc; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .bg-slate-100 { background-color: #f1f5f9; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .bg-red-600 { background-color: #dc2626; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    /* Text sizes */
+    .text-xs { font-size: 0.75rem; }
+    .text-\\[11px\\] { font-size: 11px; }
+    .text-\\[10px\\] { font-size: 10px; }
+    .text-\\[9px\\] { font-size: 9px; }
+    .text-sm { font-size: 0.875rem; }
+    .text-base { font-size: 1rem; }
+    .text-lg { font-size: 1.125rem; }
+    .font-mono { font-family: ui-monospace, monospace; }
+    /* Borders */
+    .border-b { border-bottom: 1px solid #e2e8f0; }
+    .border-t { border-top: 1px solid #e2e8f0; }
+    .border { border: 1px solid #e2e8f0; }
+    .border-slate-300 { border-color: #cbd5e1; }
+    .border-slate-200 { border-color: #e2e8f0; }
+    .border-slate-150 { border-color: #eef2f7; }
+    .border-slate-100 { border-color: #f1f5f9; }
+    .border-collapse { border-collapse: collapse; }
+    /* Rounded */
+    .rounded-xl { border-radius: 0.75rem; }
+    .rounded-lg { border-radius: 0.5rem; }
+    /* Table */
+    table { width: 100%; border-collapse: collapse; page-break-inside: auto; }
+    th, td { border: 1px solid #cbd5e1; padding: 5px 8px; font-size: 8pt; color: #0f172a; }
+    th { background-color: #f1f5f9; font-weight: 800; text-transform: uppercase; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    tr { page-break-inside: avoid; }
+    .min-w-\\[600px\\] { min-width: 0; }
+    /* Responsive grid overrides */
+    .sm\\:grid-cols-2, .md\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  </style>
+</head>
+<body>${area.innerHTML}</body>
+</html>`);
+
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      win.print();
+      win.close();
+    }, 400);
+  };
+
   // Print invoice and trigger PDF generation emulations
   const handlePrintPdf = async () => {
     if (!job) return;
@@ -1493,7 +1625,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
                 <button
                   onClick={() => {
                     triggerToast("Compiling PDF. Select 'Save as PDF' inside the destination menu!", "success");
-                    setTimeout(() => window.print(), 600);
+                    setTimeout(() => printInvoice(), 200);
                   }}
                   className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white border border-slate-700 font-bold text-xs transition-colors"
                 >
@@ -1511,7 +1643,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
                 <button
                   onClick={() => {
                     triggerToast("Preparing Print dialog. Set destination to your workshop invoice printer!", "success");
-                    setTimeout(() => window.print(), 600);
+                    setTimeout(() => printInvoice(), 200);
                   }}
                   className="px-5 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-slate-900 font-extrabold text-xs transition-colors shadow-lg active:scale-95"
                 >
