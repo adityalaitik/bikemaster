@@ -28,6 +28,8 @@ import {
   Calendar
 } from "lucide-react";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
 interface GeneratedInvoice {
   invoiceNo: string;
   jobCardNo: string;
@@ -221,7 +223,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
     const loadData = async () => {
       try {
         // 1. Load active Job Card
-        const jobRes = await fetch(`http://localhost:4000/job-cards/${jobCardId}`);
+        const jobRes = await fetch(`${API_BASE_URL}/job-cards/${jobCardId}`);
         if (jobRes.ok) {
           const jobData = await jobRes.json();
           setJob(jobData);
@@ -280,8 +282,8 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
   // Fetch catalogs dynamically
   const fetchCatalog = async (q: string) => {
     try {
-      const sparesRes = await fetch(`http://localhost:4000/spare-parts/search?q=${q}`);
-      const servicesRes = await fetch(`http://localhost:4000/services/search?q=${q}`);
+      const sparesRes = await fetch(`${API_BASE_URL}/spare-parts/search?q=${q}`);
+      const servicesRes = await fetch(`${API_BASE_URL}/services/search?q=${q}`);
       
       if (sparesRes.ok && servicesRes.ok) {
         setSparesCatalog(await sparesRes.json());
@@ -501,12 +503,12 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
   const handleSaveEstimate = async () => {
     if (!job) return;
     try {
-      const sparesRes = await fetch(`http://localhost:4000/job-cards/${job.id}/spare-items`, {
+      const sparesRes = await fetch(`${API_BASE_URL}/job-cards/${job.id}/spare-items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: allocatedSpares })
       });
-      const servicesRes = await fetch(`http://localhost:4000/job-cards/${job.id}/service-items`, {
+      const servicesRes = await fetch(`${API_BASE_URL}/job-cards/${job.id}/service-items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: allocatedServices })
@@ -515,7 +517,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
       if (sparesRes.ok && servicesRes.ok) {
         triggerToast("Estimate details saved in database!", "success");
         // refresh job card totals from backend
-        const updatedRes = await fetch(`http://localhost:4000/job-cards/${job.id}`);
+        const updatedRes = await fetch(`${API_BASE_URL}/job-cards/${job.id}`);
         if (updatedRes.ok) {
           setJob(await updatedRes.json());
         }
@@ -665,7 +667,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
     if (!job) return;
     await handleSaveEstimate(); // Ensure everything is saved first!
     try {
-      const res = await fetch(`http://localhost:4000/invoices/generate-pdf/${job.id}`, { method: "POST" });
+      const res = await fetch(`${API_BASE_URL}/invoices/generate-pdf/${job.id}`, { method: "POST" });
       if (res.ok) {
         const inv = await res.json();
         setGeneratedInvoice(inv);

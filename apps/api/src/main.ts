@@ -15,8 +15,9 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-docs', app, document);
 
-  await app.listen(4000);
-  console.log(`NestJS Backend running on: http://localhost:4000`);
-  console.log(`Swagger Documentation available on: http://localhost:4000/api-docs`);
+  const port = Number(process.env.PORT) || 4000;
+  await app.listen(port);
+  console.log(`NestJS Backend running on: http://localhost:${port}`);
+  console.log(`Swagger Documentation available on: http://localhost:${port}/api-docs`);
 }
 bootstrap();

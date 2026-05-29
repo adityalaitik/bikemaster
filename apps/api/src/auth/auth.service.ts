@@ -1,20 +1,9 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
-// Hardcoded users for demo — replace with DB query once PostgreSQL is wired up.
-// Passwords are plaintext here for simplicity; use bcrypt in production.
 export const DEMO_USERS = [
   {
     id: 'u1',
-    username: 'admin',
-    password: 'admin123',
-    role: 'super_admin',
-    name: 'Aditya Pradhan',
-    garageId: 'G001',
-    garageCode: 'BBR-001',
-  },
-  {
-    id: 'u2',
     username: 'manager',
     password: 'manager123',
     role: 'garage_manager',
@@ -23,7 +12,7 @@ export const DEMO_USERS = [
     garageCode: 'BBR-001',
   },
   {
-    id: 'u3',
+    id: 'u2',
     username: 'advisor',
     password: 'advisor123',
     role: 'service_advisor',
@@ -32,20 +21,11 @@ export const DEMO_USERS = [
     garageCode: 'BBR-001',
   },
   {
-    id: 'u4',
+    id: 'u3',
     username: 'tech',
     password: 'tech123',
     role: 'technician',
     name: 'Ravi Kumar',
-    garageId: 'G001',
-    garageCode: 'BBR-001',
-  },
-  {
-    id: 'u5',
-    username: 'cashier',
-    password: 'cashier123',
-    role: 'cashier',
-    name: 'Anita Das',
     garageId: 'G001',
     garageCode: 'BBR-001',
   },

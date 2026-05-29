@@ -37,6 +37,8 @@ import {
   Pencil
 } from "lucide-react";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
 interface Complaint {
   text: string;
   finding: string;
@@ -1234,7 +1236,7 @@ export default function Home() {
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        const res = await fetch(`http://localhost:4000/job-cards?status=${activeFilter}&search=${searchQuery}`);
+        const res = await fetch(`${API_BASE_URL}/job-cards?status=${activeFilter}&search=${searchQuery}`);
         if (res.ok) {
           const data = await res.json();
           setJobs(data);
@@ -1485,7 +1487,7 @@ export default function Home() {
     };
 
     try {
-      const res = await fetch(`http://localhost:4000/job-cards`, {
+      const res = await fetch(`${API_BASE_URL}/job-cards`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -1683,7 +1685,7 @@ export default function Home() {
     };
 
     try {
-      const res = await fetch("http://localhost:4000/auth/login", {
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: usernameInput, password: passwordInput }),
@@ -3647,250 +3649,208 @@ export default function Home() {
 
   if (!isLoggedIn) {
     return (
-      <div className={`min-h-screen flex items-center justify-center font-sans p-4 relative overflow-hidden transition-colors duration-300 ${
-        theme === "dark" 
-          ? "bg-slate-900 text-white" 
-          : "bg-slate-50 text-slate-800"
-      }`}>
-        {/* Animated Background blur patterns */}
-        <div className={`absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full blur-[120px] pointer-events-none ${
-          theme === "dark" ? "bg-green-500/10" : "bg-green-600/5"
-        }`} />
-        <div className={`absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full blur-[120px] pointer-events-none ${
-          theme === "dark" ? "bg-indigo-500/10" : "bg-indigo-600/5"
-        }`} />
+      <div className={`min-h-screen flex font-sans ${theme === "dark" ? "bg-slate-950" : "bg-slate-50"}`}>
 
-        {/* Global theme toggle on the login page as well to let them toggle uniform themes */}
+        {/* Theme toggle */}
         <button
           onClick={toggleTheme}
-          className="absolute top-6 right-6 p-2.5 rounded-xl hover:bg-slate-200/50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800 transition-all active:scale-95 z-20"
-          title="Toggle Theme"
+          className={`absolute top-5 right-5 z-30 p-2.5 rounded-xl border transition-all active:scale-95 ${
+            theme === "dark"
+              ? "bg-slate-900 border-slate-700 text-slate-400 hover:text-white hover:border-slate-600"
+              : "bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 shadow-sm"
+          }`}
         >
-          {theme === "dark" ? <Sun className="h-5 w-5 text-amber-500" /> : <Moon className="h-5 w-5 text-indigo-600" />}
+          {theme === "dark" ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-indigo-600" />}
         </button>
 
-        <div className={`backdrop-blur-xl border rounded-3xl w-full max-w-4xl animate-in fade-in zoom-in-95 duration-300 relative z-10 font-sans transition-all overflow-hidden ${
-          theme === "dark" 
-            ? "bg-slate-950/60 border-white/10 shadow-2xl text-white" 
-            : "bg-white border-slate-200 shadow-xl shadow-slate-200/30 text-slate-850"
-        }`}>
-          <div className="grid grid-cols-1 md:grid-cols-2">
-            
-            {/* Left Column - Brand & Workspace highlights */}
-            <div className={`hidden md:flex flex-col justify-between p-10 relative overflow-hidden transition-colors duration-300 ${
-              theme === "dark"
-                ? "bg-gradient-to-br from-slate-900/40 via-slate-950/20 to-slate-900/40 border-r border-white/5"
-                : "bg-gradient-to-br from-slate-50/50 via-slate-100/30 to-slate-50/50 border-r border-slate-200/60"
-            }`}>
-              
-              {/* Soft decorative background blurs */}
-              <div className={`absolute -top-12 -right-12 w-40 h-40 rounded-full blur-[80px] pointer-events-none opacity-20 ${
-                theme === "dark" ? "bg-green-500" : "bg-green-600"
-              }`} />
-              <div className={`absolute -bottom-16 -left-16 w-48 h-48 rounded-full blur-[100px] pointer-events-none opacity-20 ${
-                theme === "dark" ? "bg-indigo-500" : "bg-indigo-600"
-              }`} />
+        {/* ── LEFT BRANDING PANEL ─────────────────────────────── */}
+        <div className="hidden lg:flex flex-col w-[42%] bg-gradient-to-br from-green-700 via-emerald-600 to-teal-700 relative overflow-hidden p-12">
+          {/* dot-grid texture */}
+          <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "radial-gradient(circle, white 1.5px, transparent 1.5px)", backgroundSize: "28px 28px" }} />
+          {/* glow blobs */}
+          <div className="absolute -top-20 -left-20 w-72 h-72 rounded-full bg-white/10 blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 right-0 w-64 h-64 rounded-full bg-teal-400/20 blur-3xl pointer-events-none" />
 
-              <div className="space-y-8 relative z-10">
-                <div className="flex items-center space-x-3">
-                  <div className="bg-green-600 dark:bg-green-500 p-2.5 rounded-xl text-white dark:text-slate-950 shadow-md shadow-green-600/10 flex items-center justify-center transform hover:rotate-12 transition-transform duration-300">
-                    <Wrench className="h-5 w-5" />
-                  </div>
-                  <span className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent uppercase">
-                    BIKE MASTERS
-                  </span>
-                </div>
+          {/* Logo */}
+          <div className="relative z-10 flex items-center space-x-3">
+            <div className="bg-white/20 backdrop-blur-sm p-3 rounded-2xl border border-white/20">
+              <Wrench className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-white font-black text-lg tracking-tight leading-none">BIKE MASTERS</h1>
+              <p className="text-green-200 text-[9px] font-bold tracking-[0.18em] mt-0.5 uppercase">Workshop Management System</p>
+            </div>
+          </div>
 
-                <div className="space-y-3">
-                  <h3 className={`text-base font-black uppercase tracking-wider ${
-                    theme === "dark" ? "text-slate-200" : "text-slate-800"
-                  }`}>
-                    Enterprise WMS Ledger
-                  </h3>
-                  <p className={`text-[11px] leading-relaxed font-semibold ${
-                    theme === "dark" ? "text-slate-400" : "text-slate-500"
-                  }`}>
-                    A unified real-time portal to manage workflow queues, track parts inventory, visualize business intelligence metrics, and reconcile accounts receivables.
-                  </p>
-                </div>
-
-                {/* Sleek feature mini-cards */}
-                <div className="space-y-3.5">
-                  <div className={`flex items-start space-x-3 p-3 rounded-2xl border transition-all ${
-                    theme === "dark"
-                      ? "bg-slate-900/50 border-white/5 hover:bg-slate-900/80"
-                      : "bg-white border-slate-200/60 hover:bg-slate-50/80 shadow-sm"
-                  }`}>
-                    <div className="p-2 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-650 dark:text-indigo-400 rounded-lg shrink-0 mt-0.5">
-                      <Sliders className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider block text-indigo-600 dark:text-indigo-450">Active Workshop Queue</span>
-                      <span className={`text-[10px] font-bold ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Service track, technician allocation, and gate passes</span>
-                    </div>
-                  </div>
-
-                  <div className={`flex items-start space-x-3 p-3 rounded-2xl border transition-all ${
-                    theme === "dark"
-                      ? "bg-slate-900/50 border-white/5 hover:bg-slate-900/80"
-                      : "bg-white border-slate-200/60 hover:bg-slate-50/80 shadow-sm"
-                  }`}>
-                    <div className="p-2 bg-green-50 dark:bg-green-950/20 text-green-600 dark:text-green-455 rounded-lg shrink-0 mt-0.5">
-                      <TrendingUp className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider block text-green-600 dark:text-green-455">BI Analytics Board</span>
-                      <span className={`text-[10px] font-bold ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Weekly trends & brand performance interactive SVG charts</span>
-                    </div>
-                  </div>
-
-                  <div className={`flex items-start space-x-3 p-3 rounded-2xl border transition-all ${
-                    theme === "dark"
-                      ? "bg-slate-900/50 border-white/5 hover:bg-slate-900/80"
-                      : "bg-white border-slate-200/60 hover:bg-slate-50/80 shadow-sm"
-                  }`}>
-                    <div className="p-2 bg-purple-50 dark:bg-purple-950/20 text-purple-600 dark:text-purple-455 rounded-lg shrink-0 mt-0.5">
-                      <User className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider block text-purple-600 dark:text-purple-455">Customer Directory CRM</span>
-                      <span className={`text-[10px] font-bold ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Customer database profiles & feedback satisfaction tracker</span>
-                    </div>
-                  </div>
-
-                  <div className={`flex items-start space-x-3 p-3 rounded-2xl border transition-all ${
-                    theme === "dark"
-                      ? "bg-slate-900/50 border-white/5 hover:bg-slate-900/80"
-                      : "bg-white border-slate-200/60 hover:bg-slate-50/80 shadow-sm"
-                  }`}>
-                    <div className="p-2 bg-amber-50 dark:bg-amber-950/20 text-amber-655 dark:text-amber-455 rounded-lg shrink-0 mt-0.5">
-                      <CreditCard className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider block text-amber-655 dark:text-amber-455">Receivables Ledger</span>
-                      <span className={`text-[10px] font-bold ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Accounts receivables, dues billing, and cash/UPI receipts</span>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-
-              <div className={`text-[9px] font-bold ${theme === "dark" ? "text-slate-500" : "text-slate-400"} flex items-center space-x-1.5 mt-8 border-t pt-4 ${
-                theme === "dark" ? "border-white/5" : "border-slate-200"
-              }`}>
-                <span>SYSTEM STATUS: OPERATIONAL</span>
-                <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                <span>v2.4.1</span>
-              </div>
-
+          {/* Hero text */}
+          <div className="relative z-10 flex-1 flex flex-col justify-center space-y-6 mt-12">
+            <div>
+              <h2 className="text-white font-black text-4xl leading-tight tracking-tight">
+                Enterprise<br />Workshop<br />Control.
+              </h2>
+              <p className="text-green-100/80 text-sm mt-4 leading-relaxed max-w-xs">
+                Unified platform for job card management, technician allocation, inventory tracking, and financial reconciliation.
+              </p>
             </div>
 
-            {/* Right Column - Existing Login Form modernized */}
-            <div className="p-8 sm:p-10 flex flex-col justify-between space-y-6">
-              
-              {/* Header on Mobile view */}
-              <div className="flex flex-col items-center text-center space-y-2 mb-2 md:hidden">
-                <div className="bg-green-600 dark:bg-green-500 p-3 rounded-2xl text-white dark:text-slate-950 shadow-lg shadow-green-600/10 flex items-center justify-center transform hover:rotate-12 transition-transform duration-300 mb-1">
-                  <Wrench className="h-6 w-6" />
+            {/* Live metric cards */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { value: "247", label: "Jobs / Month" },
+                { value: "₹4.2L", label: "Revenue" },
+                { value: "98%", label: "Satisfaction" },
+              ].map((m) => (
+                <div key={m.label} className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-2xl p-4 text-center">
+                  <p className="text-white text-2xl font-black">{m.value}</p>
+                  <p className="text-green-200 text-[10px] font-bold mt-1 uppercase tracking-wide">{m.label}</p>
                 </div>
-                <h1 className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent uppercase">
-                  BIKE MASTERS
-                </h1>
-                <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${
-                  theme === "dark" 
-                    ? "bg-green-950/40 border border-green-800/30 text-green-400" 
-                    : "bg-green-50 border border-green-200 text-green-700"
-                }`}>RAMP WMS Ledger</span>
-              </div>
-
-              {/* Title Header for Desktop view */}
-              <div className="hidden md:block space-y-1.5">
-                <h2 className={`text-xl font-black uppercase tracking-wide ${
-                  theme === "dark" ? "text-white" : "text-slate-900"
-                }`}>
-                  Sign In
-                </h2>
-                <p className={`text-xs ${theme === "dark" ? "text-slate-450" : "text-slate-500"} font-semibold`}>
-                  Access your enterprise administration space.
-                </p>
-              </div>
-
-              <form onSubmit={handleLoginSubmit} className="space-y-5 font-semibold text-xs text-slate-450 dark:text-slate-350">
-                <div className="flex flex-col space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-450 dark:text-slate-550 tracking-wider">Username</label>
-                  <div className="relative">
-                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
-                    <input
-                      type="text"
-                      value={usernameInput}
-                      onChange={(e) => setUsernameInput(e.target.value)}
-                      placeholder="Enter WMS username (e.g. admin)"
-                      className={`w-full pl-10 pr-4 py-3 border rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-green-500 transition-all font-semibold ${
-                        theme === "dark" 
-                          ? "bg-slate-950/60 border-white/10 text-white focus:bg-slate-950" 
-                          : "bg-slate-50 border-slate-200 text-slate-800 focus:bg-white"
-                      }`}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-450 dark:text-slate-550 tracking-wider">Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
-                    <input
-                      type="password"
-                      value={passwordInput}
-                      onChange={(e) => setPasswordInput(e.target.value)}
-                      placeholder="••••••••"
-                      className={`w-full pl-10 pr-4 py-3 border rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-green-500 transition-all font-semibold ${
-                        theme === "dark" 
-                          ? "bg-slate-950/60 border-white/10 text-white focus:bg-slate-950" 
-                          : "bg-slate-50 border-slate-200 text-slate-800 focus:bg-white"
-                      }`}
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-3.5 bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white dark:text-slate-950 rounded-xl font-extrabold text-[10px] uppercase tracking-widest shadow-lg shadow-green-600/10 hover:shadow-green-700/20 transition-all active:scale-95 duration-200 mt-3"
-                >
-                  Sign In to Ledger
-                </button>
-              </form>
-
-              <div className="pt-6 border-t border-slate-100 dark:border-white/5 flex flex-col items-center text-center space-y-1.5 text-[10px] font-bold text-slate-450 dark:text-slate-500">
-                <span>Secure Enterprise Connection</span>
-                <span className="text-[9px] text-slate-500 dark:text-slate-600 font-mono px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md">
-                  Credentials: admin / password123
-                </span>
-              </div>
-
+              ))}
             </div>
 
+            {/* Feature list */}
+            <div className="space-y-2.5">
+              {[
+                { icon: <Sliders className="h-3.5 w-3.5" />, text: "Real-time Service Queue & Job Cards" },
+                { icon: <TrendingUp className="h-3.5 w-3.5" />, text: "BI Analytics & Revenue Reports" },
+                { icon: <CreditCard className="h-3.5 w-3.5" />, text: "Invoicing, Payments & Accounts" },
+              ].map((f) => (
+                <div key={f.text} className="flex items-center space-x-2.5 text-green-100/90">
+                  <span className="bg-white/15 p-1.5 rounded-lg shrink-0">{f.icon}</span>
+                  <span className="text-[11px] font-semibold">{f.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="relative z-10 flex items-center space-x-2 text-green-300/70 text-[10px] font-bold border-t border-white/10 pt-5">
+            <span className="h-1.5 w-1.5 rounded-full bg-green-300 animate-pulse" />
+            <span>SYSTEM ONLINE</span>
+            <span className="ml-auto opacity-60">v2.4.1</span>
           </div>
         </div>
 
-        {/* Global Toast render for Login Screen */}
-        <div className="fixed bottom-6 right-6 z-50 space-y-3.5 max-w-sm pointer-events-none">
+        {/* ── RIGHT LOGIN PANEL ──────────────────────────────── */}
+        <div className={`flex-1 flex flex-col items-center justify-center p-8 lg:p-16 relative ${theme === "dark" ? "bg-slate-950" : "bg-white"}`}>
+
+          {/* Mobile logo */}
+          <div className="lg:hidden flex items-center space-x-2.5 mb-10">
+            <div className="bg-green-600 p-2.5 rounded-xl"><Wrench className="h-5 w-5 text-white" /></div>
+            <div>
+              <p className={`font-black text-lg leading-none ${theme === "dark" ? "text-white" : "text-slate-900"}`}>BIKE MASTERS</p>
+              <p className="text-green-600 text-[9px] font-bold tracking-widest uppercase mt-0.5">WMS</p>
+            </div>
+          </div>
+
+          <div className="w-full max-w-[360px] space-y-8">
+
+            {/* Heading */}
+            <div>
+              <h2 className={`text-3xl font-black tracking-tight ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Welcome back</h2>
+              <p className={`text-sm mt-1.5 font-medium ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                Sign in to your workspace to continue.
+              </p>
+            </div>
+
+            {/* Role quick-select */}
+            <div className="space-y-3">
+              <p className={`text-[10px] font-black uppercase tracking-[0.15em] ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>
+                Quick sign-in
+              </p>
+              <div className="grid grid-cols-3 gap-2.5">
+                {([
+                  { label: "Manager",    username: "manager", password: "manager123", icon: "🏢", ring: "ring-indigo-500", bg: theme === "dark" ? "bg-indigo-950/40 border-indigo-800/60 hover:bg-indigo-950/70" : "bg-indigo-50 border-indigo-200 hover:bg-indigo-100", text: theme === "dark" ? "text-indigo-300" : "text-indigo-700" },
+                  { label: "Advisor",    username: "advisor", password: "advisor123", icon: "📋", ring: "ring-green-500",  bg: theme === "dark" ? "bg-green-950/40 border-green-800/60 hover:bg-green-950/70"   : "bg-green-50 border-green-200 hover:bg-green-100",   text: theme === "dark" ? "text-green-300"  : "text-green-700"  },
+                  { label: "Technician", username: "tech",    password: "tech123",    icon: "🔧", ring: "ring-amber-500",  bg: theme === "dark" ? "bg-amber-950/40 border-amber-800/60 hover:bg-amber-950/70"   : "bg-amber-50 border-amber-200 hover:bg-amber-100",   text: theme === "dark" ? "text-amber-300"  : "text-amber-700"  },
+                ] as const).map((r) => (
+                  <button
+                    key={r.label}
+                    type="button"
+                    onClick={() => { setUsernameInput(r.username); setPasswordInput(r.password); }}
+                    className={`flex flex-col items-center gap-1.5 py-3.5 px-2 rounded-2xl border font-bold text-xs transition-all duration-150 active:scale-95 ${r.bg} ${r.text} ${usernameInput === r.username ? `ring-2 ${r.ring}` : ""}`}
+                  >
+                    <span className="text-xl leading-none">{r.icon}</span>
+                    <span className="text-[10px] font-black tracking-wide">{r.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3">
+              <div className={`flex-1 h-px ${theme === "dark" ? "bg-slate-800" : "bg-slate-200"}`} />
+              <span className={`text-[10px] font-bold uppercase tracking-widest shrink-0 ${theme === "dark" ? "text-slate-600" : "text-slate-400"}`}>or enter manually</span>
+              <div className={`flex-1 h-px ${theme === "dark" ? "bg-slate-800" : "bg-slate-200"}`} />
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className={`text-[10px] font-black uppercase tracking-[0.15em] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Username</label>
+                <div className="relative">
+                  <User className={`absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 ${theme === "dark" ? "text-slate-600" : "text-slate-400"}`} />
+                  <input
+                    type="text"
+                    value={usernameInput}
+                    onChange={(e) => setUsernameInput(e.target.value)}
+                    placeholder="username"
+                    className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-500 transition-all ${
+                      theme === "dark"
+                        ? "bg-slate-900 border-slate-800 text-white placeholder:text-slate-700 focus:border-slate-700"
+                        : "bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white"
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className={`text-[10px] font-black uppercase tracking-[0.15em] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Password</label>
+                <div className="relative">
+                  <Lock className={`absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 ${theme === "dark" ? "text-slate-600" : "text-slate-400"}`} />
+                  <input
+                    type="password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    placeholder="••••••••"
+                    className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-500 transition-all ${
+                      theme === "dark"
+                        ? "bg-slate-900 border-slate-800 text-white placeholder:text-slate-700 focus:border-slate-700"
+                        : "bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white"
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3.5 mt-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-extrabold text-sm tracking-wide shadow-lg shadow-green-600/25 hover:shadow-green-700/30 transition-all active:scale-[0.98] duration-150 flex items-center justify-center gap-2"
+              >
+                Sign In
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </form>
+
+            {/* Footer */}
+            <p className={`text-center text-[10px] font-medium ${theme === "dark" ? "text-slate-700" : "text-slate-400"}`}>
+              © BikeMaster 2026 &nbsp;·&nbsp; Powered by <span className={`font-bold ${theme === "dark" ? "text-slate-500" : "text-slate-500"}`}>LeOmm Labs</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Toast */}
+        <div className="fixed bottom-6 right-6 z-50 space-y-3 max-w-sm pointer-events-none">
           {toasts.map((toast) => (
             <div
               key={toast.id}
               className={`p-4 rounded-2xl shadow-xl flex items-start space-x-3.5 animate-in slide-in-from-bottom-6 duration-300 pointer-events-auto border ${
                 toast.type === "success" ? "bg-green-600 text-white border-green-500 shadow-green-600/10" :
-                toast.type === "warn" ? "bg-red-500 text-white border-red-400 shadow-red-500/10" :
-                "bg-slate-800 text-slate-100 dark:bg-slate-700 border-slate-700 dark:border-slate-600 shadow-slate-900/20"
+                toast.type === "warn"    ? "bg-red-500 text-white border-red-400 shadow-red-500/10" :
+                "bg-slate-800 text-slate-100 border-slate-700 shadow-slate-900/20"
               }`}
             >
               {toast.type === "success" ? <CheckCircle className="h-5 w-5 mt-0.5 shrink-0" /> : <Info className="h-5 w-5 mt-0.5 shrink-0" />}
-              <div className="text-xs font-semibold flex-1 leading-relaxed">
-                {toast.msg}
-              </div>
-              <button
-                onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
-                className="text-white/70 hover:text-white transition-colors"
-              >
+              <div className="text-xs font-semibold flex-1 leading-relaxed">{toast.msg}</div>
+              <button onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} className="text-white/70 hover:text-white transition-colors">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -4099,9 +4059,10 @@ export default function Home() {
                     <div key={item.name} className="space-y-1">
                       <button
                         onClick={() => {
-                          item.setExpandedState(!item.expandedState);
-                          if (!isChildActive) {
-                            setActiveTab(item.subItems[0].name);
+                          item.setExpandedState?.(!item.expandedState);
+                          const firstSubItem = item.subItems?.[0];
+                          if (!isChildActive && firstSubItem) {
+                            setActiveTab(firstSubItem.name);
                           }
                         }}
                         className={`w-full flex items-center justify-between p-2.5 rounded-xl text-sm font-semibold transition-all relative ${
@@ -4732,7 +4693,7 @@ export default function Home() {
                   <button
                     onClick={async () => {
                       try {
-                        const res = await fetch(`http://localhost:4000/job-cards/${selectedJob.id}/status`, {
+                        const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}/status`, {
                           method: "PATCH",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ status: "Completed" })
@@ -4757,7 +4718,7 @@ export default function Home() {
                   <button
                     onClick={async () => {
                       try {
-                        const res = await fetch(`http://localhost:4000/job-cards/${selectedJob.id}`, {
+                        const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, {
                           method: "DELETE"
                         });
                         if (res.ok) {
@@ -7046,7 +7007,7 @@ export default function Home() {
                       return;
                     }
                     try {
-                      await fetch(`http://localhost:4000/vehicle-models`, {
+                      await fetch(`${API_BASE_URL}/vehicle-models`, {
                         method: "POST",
                         headers: {"Content-Type": "application/json"},
                         body: JSON.stringify({
@@ -7143,7 +7104,7 @@ export default function Home() {
                   onClick={async () => {
                     if (!newSourceName.trim()) return;
                     try {
-                      await fetch(`http://localhost:4000/customer-sources`, {
+                      await fetch(`${API_BASE_URL}/customer-sources`, {
                         method: "POST",
                         headers: {"Content-Type": "application/json"},
                         body: JSON.stringify({ name: newSourceName })
@@ -7192,7 +7153,7 @@ export default function Home() {
                   onClick={async () => {
                     if (!newEmployeeName.trim()) return;
                     try {
-                      await fetch(`http://localhost:4000/employees`, {
+                      await fetch(`${API_BASE_URL}/employees`, {
                         method: "POST",
                         headers: {"Content-Type": "application/json"},
                         body: JSON.stringify({ name: newEmployeeName, role: employeeRoleType })

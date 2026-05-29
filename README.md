@@ -136,6 +136,16 @@ npm run dev --workspace=apps/api
 npm run dev --workspace=apps/web
 ```
 
+## Vercel Deployment
+
+This repository includes `vercel.json` for deploying the frontend from the monorepo root. In Vercel, keep the project root as the repository root and set:
+
+```env
+NEXT_PUBLIC_API_URL=https://your-api-host.example.com
+```
+
+The Vercel build runs `npm run build --workspace=apps/web` and outputs `apps/web/.next`. Deploy the NestJS API separately on a Node host with PostgreSQL and Redis access; the frontend should point to that API URL.
+
 ---
 
 ## Database
