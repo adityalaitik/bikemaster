@@ -56,11 +56,23 @@ html.dark body {
    ========================================== */
 @page {
   size: A4;
-  margin: 1cm;
+  /* margin: 0 removes the browser's URL / date / page-number header-footer bands */
+  margin: 0;
 }
 
 @media print {
-  /* Hide everything by default */
+  /* Collapse body height to zero so the hidden page content behind the modal
+     does not generate blank pages before the invoice */
+  html {
+    overflow: hidden !important;
+  }
+  body {
+    height: 0 !important;
+    overflow: hidden !important;
+    background: #ffffff !important;
+  }
+
+  /* Hide everything inside the collapsed body */
   body * {
     visibility: hidden !important;
   }
@@ -77,24 +89,17 @@ html.dark body {
     visibility: hidden !important;
   }
 
-  /* Page base */
-  html, body {
-    background: #ffffff !important;
-    color: #000000 !important;
-    height: auto !important;
-    overflow: visible !important;
-  }
-
   /* Reset ALL element positioning so position:absolute on the print area
-     anchors to the document root (avoids the modal's position:fixed ancestor
-     creating a sub-containing-block, which caused the bill to repeat per page) */
+     anchors to the initial containing block (avoids the modal's position:fixed
+     ancestor creating a sub-containing-block) */
   * {
     position: static !important;
     overflow: visible !important;
     max-height: none !important;
   }
 
-  /* Place the invoice at the top of the document */
+  /* Place the invoice at the top of the page.
+     1.5cm padding compensates for @page margin: 0 */
   #invoice-print-area {
     position: absolute !important;
     top: 0 !important;
@@ -103,7 +108,7 @@ html.dark body {
     max-width: 100% !important;
     max-height: none !important;
     overflow: visible !important;
-    padding: 20px !important;
+    padding: 1.5cm !important;
     margin: 0 !important;
     background: #ffffff !important;
     color: #000000 !important;
