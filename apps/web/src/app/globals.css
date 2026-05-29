@@ -85,10 +85,20 @@ html.dark body {
     overflow: visible !important;
   }
 
-  /* Take over the full page — use fixed so it sits in the viewport coordinate space */
+  /* Reset ALL element positioning so position:absolute on the print area
+     anchors to the document root (avoids the modal's position:fixed ancestor
+     creating a sub-containing-block, which caused the bill to repeat per page) */
+  * {
+    position: static !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  /* Place the invoice at the top of the document */
   #invoice-print-area {
-    position: fixed !important;
-    inset: 0 !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
     max-height: none !important;
@@ -101,13 +111,6 @@ html.dark body {
     border: none !important;
     print-color-adjust: exact !important;
     -webkit-print-color-adjust: exact !important;
-  }
-
-  /* Only strip clipping/shadow from ancestors that sit OUTSIDE the print area */
-  body > *:not(#invoice-print-area),
-  body > * > *:not(#invoice-print-area) {
-    overflow: visible !important;
-    max-height: none !important;
   }
 
   /* Force 2-column grids inside the invoice (responsive classes don't fire at print widths) */

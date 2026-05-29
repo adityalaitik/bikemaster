@@ -4168,6 +4168,16 @@ export default function Home() {
               )}
             </div>
 
+            {/* Copyright */}
+            {!sidebarCollapsed && (
+              <div className="px-3 pb-3 text-center">
+                <p className="text-[9px] text-slate-400 dark:text-slate-600 leading-relaxed">
+                  Powered by <span className="font-bold text-slate-500 dark:text-slate-500">LeOmm Labs</span><br />
+                  &copy; Copyright LeOmm Labs 2026. All rights reserved.
+                </p>
+              </div>
+            )}
+
           </aside>
 
           {/* ============================================================ */}
