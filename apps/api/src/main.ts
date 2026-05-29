@@ -4,7 +4,15 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableCors(); // allow cross-origin requests from Next.js (port 3000)
+  const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3001')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  app.enableCors({
+    origin: allowedOrigins,
+    credentials: true,
+  });
 
   const config = new DocumentBuilder()
     .setTitle('BikeMasters WMS API')

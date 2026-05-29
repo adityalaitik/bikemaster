@@ -1257,6 +1257,7 @@ export default function Home() {
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isManageUsersExpanded, setIsManageUsersExpanded] = useState(true);
   
   // Tab control inside Side Panel
@@ -3700,7 +3701,7 @@ export default function Home() {
                 { value: "₹4.2L", label: "Revenue" },
                 { value: "98%", label: "Satisfaction" },
               ].map((m) => (
-                <div key={m.label} className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-2xl p-4 text-center">
+	                <div key={m.label} className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl p-4 text-center">
                   <p className="text-white text-2xl font-black">{m.value}</p>
                   <p className="text-green-200 text-[10px] font-bold mt-1 uppercase tracking-wide">{m.label}</p>
                 </div>
@@ -3742,7 +3743,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="w-full max-w-[360px] space-y-8">
+	          <div className="w-full max-w-[360px] space-y-7">
 
             {/* Heading */}
             <div>
@@ -3757,22 +3758,25 @@ export default function Home() {
               <p className={`text-[10px] font-black uppercase tracking-[0.15em] ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>
                 Quick sign-in
               </p>
-              <div className="grid grid-cols-3 gap-2.5">
-                {([
-                  { label: "Manager",    username: "manager", password: "manager123", icon: "🏢", ring: "ring-indigo-500", bg: theme === "dark" ? "bg-indigo-950/40 border-indigo-800/60 hover:bg-indigo-950/70" : "bg-indigo-50 border-indigo-200 hover:bg-indigo-100", text: theme === "dark" ? "text-indigo-300" : "text-indigo-700" },
-                  { label: "Advisor",    username: "advisor", password: "advisor123", icon: "📋", ring: "ring-green-500",  bg: theme === "dark" ? "bg-green-950/40 border-green-800/60 hover:bg-green-950/70"   : "bg-green-50 border-green-200 hover:bg-green-100",   text: theme === "dark" ? "text-green-300"  : "text-green-700"  },
-                  { label: "Technician", username: "tech",    password: "tech123",    icon: "🔧", ring: "ring-amber-500",  bg: theme === "dark" ? "bg-amber-950/40 border-amber-800/60 hover:bg-amber-950/70"   : "bg-amber-50 border-amber-200 hover:bg-amber-100",   text: theme === "dark" ? "text-amber-300"  : "text-amber-700"  },
-                ] as const).map((r) => (
-                  <button
-                    key={r.label}
-                    type="button"
-                    onClick={() => { setUsernameInput(r.username); setPasswordInput(r.password); }}
-                    className={`flex flex-col items-center gap-1.5 py-3.5 px-2 rounded-2xl border font-bold text-xs transition-all duration-150 active:scale-95 ${r.bg} ${r.text} ${usernameInput === r.username ? `ring-2 ${r.ring}` : ""}`}
-                  >
-                    <span className="text-xl leading-none">{r.icon}</span>
-                    <span className="text-[10px] font-black tracking-wide">{r.label}</span>
-                  </button>
-                ))}
+	              <div className="grid grid-cols-3 gap-2.5">
+	                {([
+	                  { label: "Manager",    username: "manager", password: "manager123", icon: Briefcase, ring: "ring-indigo-500", bg: theme === "dark" ? "bg-indigo-950/40 border-indigo-800/60 hover:bg-indigo-950/70" : "bg-indigo-50 border-indigo-200 hover:bg-indigo-100", text: theme === "dark" ? "text-indigo-300" : "text-indigo-700" },
+	                  { label: "Advisor",    username: "advisor", password: "advisor123", icon: FileText, ring: "ring-green-500",  bg: theme === "dark" ? "bg-green-950/40 border-green-800/60 hover:bg-green-950/70"   : "bg-green-50 border-green-200 hover:bg-green-100",   text: theme === "dark" ? "text-green-300"  : "text-green-700"  },
+	                  { label: "Technician", username: "tech",    password: "tech123",    icon: Wrench, ring: "ring-amber-500",  bg: theme === "dark" ? "bg-amber-950/40 border-amber-800/60 hover:bg-amber-950/70"   : "bg-amber-50 border-amber-200 hover:bg-amber-100",   text: theme === "dark" ? "text-amber-300"  : "text-amber-700"  },
+		                ] as const).map((r) => {
+		                  const RoleIcon = r.icon;
+		                  return (
+		                    <button
+		                      key={r.label}
+		                      type="button"
+		                      onClick={() => { setUsernameInput(r.username); setPasswordInput(r.password); }}
+		                      className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border font-bold text-xs transition-all duration-150 active:scale-95 ${r.bg} ${r.text} ${usernameInput === r.username ? `ring-2 ${r.ring}` : ""}`}
+		                    >
+		                      <RoleIcon className="h-5 w-5" />
+		                      <span className="text-[10px] font-black tracking-wide">{r.label}</span>
+		                    </button>
+		                  );
+		                })}
               </div>
             </div>
 
@@ -3875,7 +3879,13 @@ export default function Home() {
             {/* Logo on Left */}
             <div className="flex items-center space-x-3">
               <button
-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                onClick={() => {
+                  if (window.innerWidth < 768) {
+                    setIsMobileSidebarOpen(true);
+                  } else {
+                    setSidebarCollapsed(!sidebarCollapsed);
+                  }
+                }}
                 className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-all mr-1.5 active:scale-95"
                 title="Toggle Sidebar"
               >
@@ -3884,7 +3894,7 @@ export default function Home() {
               <div className="bg-green-600 dark:bg-green-500 p-2.5 rounded-xl text-white shadow-md shadow-green-600/10 flex items-center justify-center transform hover:rotate-12 transition-transform duration-300">
                 <Wrench className="h-5 w-5" />
               </div>
-              <span className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
+              <span className="hidden sm:inline font-extrabold text-xl tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
                 BIKE MASTERS
               </span>
               <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-700/50 text-xs font-semibold px-2.5 py-1 rounded-full text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
@@ -3894,7 +3904,7 @@ export default function Home() {
             </div>
 
             {/* Top Navigation Options & Controls */}
-            <div className="flex items-center space-x-3.5">
+            <div className="flex items-center space-x-2 sm:space-x-3.5">
               
               {/* Branch Selector Pill */}
               <div className="hidden lg:flex items-center space-x-1 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-sm font-medium hover:border-slate-300 dark:hover:border-slate-600 transition-colors cursor-pointer">
@@ -3954,10 +3964,10 @@ export default function Home() {
               {/* "NEW CUSTOMER REGISTRATION" Green Button */}
               <button
                 onClick={() => setIsModalOpen(true)}
-                className="flex items-center space-x-1.5 bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-md shadow-green-600/10 hover:shadow-green-700/20 active:scale-95 transition-all"
+                className="flex items-center space-x-1.5 bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white font-bold text-sm px-3 sm:px-4 py-2.5 rounded-xl shadow-md shadow-green-600/10 hover:shadow-green-700/20 active:scale-95 transition-all"
               >
                 <Plus className="h-4 w-4" />
-                <span>NEW REGISTRATION</span>
+                <span className="hidden sm:inline">NEW REGISTRATION</span>
               </button>
 
 
@@ -3974,7 +3984,31 @@ export default function Home() {
           {/* ============================================================ */}
           {/* 2. LEFT SIDEBAR */}
           {/* ============================================================ */}
-          <aside className={`border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 transition-all duration-300 flex flex-col justify-between ${sidebarCollapsed ? "w-16" : "w-64"}`}>
+          {isMobileSidebarOpen && (
+            <button
+              type="button"
+              aria-label="Close navigation"
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="fixed inset-0 z-40 bg-slate-950/40 md:hidden"
+            />
+          )}
+
+          <aside className={`fixed md:relative inset-y-0 left-0 z-50 md:z-auto border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 transition-all duration-300 flex flex-col justify-between shadow-2xl md:shadow-none ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"} ${sidebarCollapsed ? "w-72 md:w-16" : "w-72 md:w-64"}`}>
+            <div className="md:hidden h-16 px-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-700">
+              <div className="flex items-center space-x-2">
+                <div className="bg-green-600 p-2 rounded-xl text-white">
+                  <Wrench className="h-4 w-4" />
+                </div>
+                <span className="font-black text-sm tracking-tight">BIKE MASTERS</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(false)}
+                className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
             
             {/* Sidebar Link Options */}
             <div className="py-4 space-y-1 px-3 overflow-y-auto max-h-[calc(100vh-10rem)]">
@@ -4091,10 +4125,11 @@ export default function Home() {
                             return (
                               <button
                                 key={subItem.name}
-                                onClick={() => {
-                                  setActiveTab(subItem.name);
-                                  triggerToast(`Switched workspace to ${subItem.name}`, "info");
-                                }}
+	                                onClick={() => {
+	                                  setActiveTab(subItem.name);
+	                                  setIsMobileSidebarOpen(false);
+	                                  triggerToast(`Switched workspace to ${subItem.name}`, "info");
+	                                }}
                                 className={`w-full flex items-center space-x-2.5 p-2 rounded-lg text-xs font-bold transition-all relative ${
                                   isSubActive
                                     ? "bg-slate-100 text-slate-950 dark:bg-slate-800 dark:text-white"
@@ -4117,10 +4152,11 @@ export default function Home() {
                 return (
                   <button
                     key={item.name}
-                    onClick={() => {
-                      setActiveTab(item.name);
-                      triggerToast(`Switched workspace to ${item.name}`, "info");
-                    }}
+	                    onClick={() => {
+	                      setActiveTab(item.name);
+	                      setIsMobileSidebarOpen(false);
+	                      triggerToast(`Switched workspace to ${item.name}`, "info");
+	                    }}
                     className={`w-full flex items-center justify-between p-2.5 rounded-xl text-sm font-semibold transition-all relative ${
                       isActive
                         ? "bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400"
@@ -4197,7 +4233,7 @@ export default function Home() {
             ) : activeTab === "Service Queue" ? (
               <>
                 {/* Left Content Area (Grid of Job Cards) */}
-            <div className="flex-1 flex flex-col overflow-y-auto px-6 py-6 space-y-6">
+	            <div className="flex-1 flex flex-col overflow-y-auto px-4 md:px-6 py-5 md:py-6 space-y-5 md:space-y-6">
               
               {/* Header Page Title */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -4302,7 +4338,7 @@ export default function Home() {
               ) : (
                 
                 /* Job Cards Grid */
-                <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-5">
+	                <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4">
                   {filteredJobs.map((job) => {
                     const isSelected = selectedJob && selectedJob.id === job.id;
                     return (
@@ -4313,7 +4349,7 @@ export default function Home() {
                           setIsSidePanelOpen(true);
                           triggerToast(`Viewing Job Card ${job.id}`, "info");
                         }}
-                        className={`bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-md cursor-pointer transition-all duration-300 border relative overflow-hidden ${
+	                        className={`bg-white dark:bg-slate-800 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition-all duration-300 border relative overflow-hidden ${
                           isSelected
                             ? "ring-2 ring-green-600 dark:ring-green-500 border-transparent bg-slate-50/50 dark:bg-slate-800/80"
                             : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
@@ -4326,14 +4362,14 @@ export default function Home() {
                             <span className="text-sm font-extrabold tracking-wide font-mono text-slate-900 dark:text-white">
                               {job.vehicleNo}
                             </span>
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium mt-0.5">
+	                            <span className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-0.5">
                               {job.id}
                             </span>
                           </div>
                           
                           {/* Service Type badge */}
                           <div className="flex items-center space-x-1.5">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+	                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                               job.serviceType === "Regular" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400" :
                               job.serviceType === "Accidental" ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400" :
                               "bg-purple-50 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400"
@@ -4410,15 +4446,15 @@ export default function Home() {
                           
                           <div className="flex space-x-4 font-semibold">
                             <div className="flex flex-col">
-                              <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wide font-bold">Estimate</span>
+	                              <span className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide font-bold">Estimate</span>
                               <span className="text-slate-800 dark:text-slate-200 mt-0.5">₹{job.estimate}</span>
                             </div>
                             <div className="flex flex-col">
-                              <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wide font-bold">Paid</span>
+	                              <span className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide font-bold">Paid</span>
                               <span className="text-green-600 dark:text-green-400 mt-0.5">₹{job.paid}</span>
                             </div>
                             <div className="flex flex-col">
-                              <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wide font-bold">Due</span>
+	                              <span className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide font-bold">Due</span>
                               <span className="text-red-500 dark:text-red-400 mt-0.5">₹{job.due}</span>
                             </div>
                           </div>
@@ -4431,7 +4467,7 @@ export default function Home() {
                                 triggerToast(`Generating estimate printout for ${job.id}`, "success");
                                 setTimeout(() => window.print(), 500);
                               }}
-                              className="px-2 py-1 rounded bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-[10px] font-bold text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 transition-colors"
+	                              className="px-2 py-1 rounded bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 transition-colors"
                             >
                               Estimate
                             </button>
@@ -4440,7 +4476,7 @@ export default function Home() {
                                 e.stopPropagation();
                                 triggerToast(`Processing invoice for ${job.id}`, "success");
                               }}
-                              className="px-2 py-1 rounded bg-green-600 text-white hover:bg-green-700 text-[10px] font-bold transition-colors"
+	                              className="px-2 py-1 rounded bg-green-600 text-white hover:bg-green-700 text-xs font-bold transition-colors"
                             >
                               Pay
                             </button>
@@ -4459,8 +4495,15 @@ export default function Home() {
             {/* ============================================================ */}
             {/* 4. SIDE PANEL (Full Details View) */}
             {/* ============================================================ */}
-            {isSidePanelOpen && selectedJob && (
-              <div className="w-[480px] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 flex flex-col overflow-hidden h-full shadow-2xl relative transition-transform duration-300">
+	            {isSidePanelOpen && selectedJob && (
+	              <>
+	              <button
+	                type="button"
+	                aria-label="Close job details"
+	                onClick={() => setIsSidePanelOpen(false)}
+	                className="fixed inset-0 z-30 bg-slate-950/30 md:hidden"
+	              />
+	              <div className="fixed md:relative inset-y-0 right-0 z-40 w-full max-w-[480px] md:w-[480px] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 flex flex-col overflow-hidden h-full shadow-2xl transition-transform duration-300">
                 
                 {/* Header Panel */}
                 <div className="p-4 border-b border-slate-200 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900/30 flex items-center justify-between">
@@ -4525,7 +4568,7 @@ export default function Home() {
                     <div className="space-y-4">
                       
                       {/* Customer Cards Details */}
-                      <div className="bg-slate-50 dark:bg-slate-900/30 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+	                      <div className="bg-slate-50 dark:bg-slate-900/30 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
                         <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Customer Context</h4>
                         <div className="space-y-2 text-xs">
                           <div className="flex justify-between"><span className="text-slate-400">Full Name:</span><span className="font-semibold">{selectedJob.customerName}</span></div>
@@ -4536,7 +4579,7 @@ export default function Home() {
                       </div>
 
                       {/* Technical Specs Checklist */}
-                      <div className="bg-slate-50 dark:bg-slate-900/30 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+	                      <div className="bg-slate-50 dark:bg-slate-900/30 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
                         <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2.5">Technical & Checklist Specifications</h4>
                         <div className="grid grid-cols-2 gap-3 text-xs">
                           <div className="flex flex-col"><span className="text-[10px] text-slate-400">Odometer Reading:</span><span className="font-bold mt-0.5">{selectedJob.kms.toLocaleString()} KMS</span></div>
@@ -4547,7 +4590,7 @@ export default function Home() {
                       </div>
 
                       {/* Budget summary */}
-                      <div className="bg-slate-50 dark:bg-slate-900/30 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+	                      <div className="bg-slate-50 dark:bg-slate-900/30 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
                         <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Estimation Split</h4>
                         <div className="space-y-2 text-xs font-semibold">
                           <div className="flex justify-between"><span className="text-slate-400">Subtotal:</span><span>₹{selectedJob.estimate - 150}</span></div>
@@ -4556,8 +4599,8 @@ export default function Home() {
                         </div>
                       </div>
 
-                    </div>
-                  )}
+		              </div>
+		            )}
 
                   {/* COMPLAINTS TAB */}
                   {sidePanelTab === "Complaints" && (
@@ -4741,10 +4784,11 @@ export default function Home() {
                   </button>
                 </div>
 
-              </div>
-            )}
-              </>
-            ) : activeTab === "Inventory" ? (
+	              </div>
+		              </>
+		            )}
+	              </>
+	            ) : activeTab === "Inventory" ? (
               <div className="flex-1 flex flex-col lg:flex-row overflow-hidden bg-slate-50/50 dark:bg-slate-900">
                 
                 {/* ============================================================ */}

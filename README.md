@@ -138,13 +138,42 @@ npm run dev --workspace=apps/web
 
 ## Vercel Deployment
 
-This repository includes `vercel.json` for deploying the frontend from the monorepo root. In Vercel, keep the project root as the repository root and set:
+This repository includes `vercel.json` for deploying the frontend from the monorepo root. Deploy the NestJS API separately on a Node host such as Railway, Render, Fly.io, or Azure App Service.
+
+In Vercel, keep the project root as the repository root and set:
 
 ```env
 NEXT_PUBLIC_API_URL=https://your-api-host.example.com
 ```
 
-The Vercel build runs `npm run build --workspace=apps/web` and outputs `apps/web/.next`. Deploy the NestJS API separately on a Node host with PostgreSQL and Redis access; the frontend should point to that API URL.
+The Vercel build runs `npm run build --workspace=apps/web` and outputs `apps/web/.next`.
+
+### API Deployment
+
+For Railway or a similar Node host, use:
+
+```bash
+npm install
+npm run build --workspace=apps/api
+npm run start:prod --workspace=apps/api
+```
+
+Set API environment variables from `apps/api/.env.example`:
+
+```env
+DATABASE_URL=postgresql://...
+REDIS_URL=redis://...
+JWT_SECRET=replace-with-a-long-random-secret
+CORS_ORIGIN=https://your-vercel-app.vercel.app
+```
+
+After PostgreSQL is available, initialize it in this order:
+
+```bash
+psql "$DATABASE_URL" -f db/schema/ddl_create.sql
+psql "$DATABASE_URL" -f db/dml/seed_data.sql
+psql "$DATABASE_URL" -f db/dcl/permissions.sql
+```
 
 ---
 
