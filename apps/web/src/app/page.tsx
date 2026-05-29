@@ -4132,7 +4132,7 @@ export default function Home() {
             </div>
 
             {/* Sidebar Footer (User Info & Logout) */}
-            <div className="p-3 border-t border-slate-200 dark:border-slate-700 font-sans">
+            <div className="px-3 pt-3 pb-0 border-t border-slate-200 dark:border-slate-700 font-sans">
               {sidebarCollapsed ? (
                 <div className="flex flex-col items-center space-y-2">
                   <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-green-600 to-emerald-500 dark:from-green-500 dark:to-teal-400 flex items-center justify-center text-white font-extrabold text-xs shadow-md shadow-green-500/10" title="Aditya Pradhan (Super Admin)">
@@ -4170,7 +4170,7 @@ export default function Home() {
 
             {/* Copyright */}
             {!sidebarCollapsed && (
-              <div className="px-3 pt-1 pb-2 text-center border-t border-slate-100 dark:border-slate-700/50">
+              <div className="px-3 pt-2 pb-2 text-center">
                 <p className="text-[9px] text-slate-400 dark:text-slate-600 leading-snug">
                   Powered by <span className="font-bold text-slate-500 dark:text-slate-500">LeOmm Labs</span><br />
                   &copy; Copyright LeOmm Labs 2026. All rights reserved.
