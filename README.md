@@ -53,6 +53,69 @@ bikemaster/
 
 ---
 
+## 🛠 Complete Local Setup
+
+Follow these steps to get the system running on your local machine.
+
+### 1. Clone & Install
+```bash
+git clone https://github.com/adityalaitik/bikemaster.git
+cd bikemaster
+npm install
+```
+
+### 2. Infrastructure (PostgreSQL & Redis)
+You can run these via Docker or use a managed service like Railway.
+```bash
+# Start local PG and Redis
+docker-compose up -d
+```
+
+### 3. Database Initialization
+Execute the SQL scripts in this specific order to create the schema, seed data, and apply permissions:
+```bash
+# Replace host, user and db name if using a remote service
+psql -h localhost -U postgres -d bikemaster -f db/schema/ddl_create.sql
+psql -h localhost -U postgres -d bikemaster -f db/dml/seed_data.sql
+psql -h localhost -U postgres -d bikemaster -f db/dcl/permissions.sql
+```
+
+### 4. Environment Variables
+Create the following `.env` files:
+
+**`apps/api/.env`**
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/bikemaster
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=your_long_random_secret_here
+PORT=4000
+CORS_ORIGIN=http://localhost:3000
+```
+
+**`apps/web/.env.local`**
+```env
+NEXT_PUBLIC_API_URL=http://localhost:4000
+```
+
+### 5. Run the Application
+```bash
+# Starts both Frontend and Backend
+npm run dev
+```
+
+| Service | Access URL |
+|---|---|
+| **Frontend** | http://localhost:3000 |
+| **Backend API** | http://localhost:4000 |
+| **API Docs** | http://localhost:4000/api-docs |
+
+### 6. Demo Login Credentials
+Use these accounts to explore the multi-tenant workflows:
+- **Super Admin**: `admin@bikemasters.in` / `admin123`
+- **Garage Manager**: `manager.bbr@bikemasters.in` / `manager123`
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -71,53 +134,6 @@ bikemaster/
 - Node.js ≥ 20
 - npm ≥ 10
 - Docker & Docker Compose (for PostgreSQL and Redis)
-
----
-
-## Getting Started
-
-```bash
-# 1. Install all workspace dependencies
-npm install
-
-# 2. Start infrastructure
-docker-compose up -d
-
-# 3. Seed the database
-psql -h localhost -U postgres -d bikemaster -f db/schema/ddl_create.sql
-psql -h localhost -U postgres -d bikemaster -f db/dml/seed_data.sql
-psql -h localhost -U postgres -d bikemaster -f db/dcl/permissions.sql
-
-# 4. Configure environment variables (see below)
-
-# 5. Start all apps in development mode
-npm run dev
-```
-
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:3000 |
-| API | http://localhost:4000 |
-| API Docs (Swagger) | http://localhost:4000/api-docs |
-
----
-
-## Environment Variables
-
-Create `.env` files in each app directory. Minimum required:
-
-**`apps/api/.env`**
-```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/bikemaster
-REDIS_URL=redis://localhost:6379
-JWT_SECRET=your_jwt_secret
-PORT=4000
-```
-
-**`apps/web/.env.local`**
-```env
-NEXT_PUBLIC_API_URL=http://localhost:4000
-```
 
 ---
 
