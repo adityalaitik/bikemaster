@@ -362,10 +362,10 @@ export default function Home() {
     }
   }, [theme, mounted]);
 
-  const [activeTab, setActiveTab] = useState("Service Queue");
+  const [activeTab, setActiveTab] = useState("Dashboard");
   const [activeFilter, setActiveFilter] = useState("All Jobs");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedJob, setSelectedJob] = useState<JobCard | null>(INITIAL_JOBS[0]);
+  const [selectedJob, setSelectedJob] = useState<JobCard | null>(null);
 
   // Authentication states
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -1254,7 +1254,26 @@ export default function Home() {
     };
     fetchJobs();
   }, [activeFilter, searchQuery]);
-  const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
+
+  // Load employees from Backend dynamically
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/employees`);
+        if (res.ok) {
+          const data = await res.json();
+          const techs = data.filter((e: any) => e.role === 'technician').map((e: any) => e.name);
+          const advisors = data.filter((e: any) => e.role === 'advisor' || e.role === 'supervisor').map((e: any) => e.name);
+          if (techs.length > 0) setTechniciansList(techs);
+          if (advisors.length > 0) setSupervisorsList(advisors);
+        }
+      } catch (err) {
+        console.error("Failed to fetch employees", err);
+      }
+    };
+    fetchEmployees();
+  }, []);
+  const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -1499,6 +1518,7 @@ export default function Home() {
         setSelectedJob(newJob);
         setSavedJobCardId(newJob.id);
         setSavedJobCardDetails(newJob);
+        setIsModalOpen(false);
         setIsSuccessOverlayOpen(true);
         triggerToast(`Customer registered successfully!`, "success");
       } else {
@@ -1535,6 +1555,7 @@ export default function Home() {
       setSelectedJob(fallbackJob);
       setSavedJobCardId(fallbackJob.id);
       setSavedJobCardDetails(fallbackJob);
+      setIsModalOpen(false);
       setIsSuccessOverlayOpen(true);
       triggerToast(`Customer registered (Local Fallback)!`, "success");
     }
@@ -1563,7 +1584,6 @@ export default function Home() {
       technician: "Manoj Kumar",
       supervisor: "Anil Dash"
     });
-    setVehicleSearchText("");
     setVehicleSearchText("");
   };
 
@@ -1597,25 +1617,27 @@ export default function Home() {
   };
 
   // Filtering Logic
-  const filteredJobs = jobs.filter((job) => {
-    // 1. Status Filter
-    if (activeFilter !== "All Jobs") {
-      if (activeFilter === "Under Servicing" && job.status !== "Under Servicing") return false;
-      if (activeFilter === "Ready for Delivery" && job.status !== "Ready for Delivery") return false;
-      if (activeFilter === "Payment Processing" && job.status !== "Payment Processing") return false;
-      if (activeFilter === "Completed" && job.status !== "Completed") return false;
-    }
-    // 2. Search query (regex or search string matches Customer name, Phone, or Vehicle No)
-    if (searchQuery.trim().length > 0) {
-      const q = searchQuery.toLowerCase();
-      const nameMatch = job.customerName.toLowerCase().includes(q);
-      const phoneMatch = job.phone.includes(q);
-      const vehicleMatch = job.vehicleNo.toLowerCase().includes(q);
-      const modelMatch = job.brandModel.toLowerCase().includes(q);
-      return nameMatch || phoneMatch || vehicleMatch || modelMatch;
-    }
-    return true;
-  });
+  const filteredJobs = jobs
+    .filter((job) => {
+      // 1. Status Filter
+      if (activeFilter !== "All Jobs") {
+        if (activeFilter === "Under Servicing" && job.status !== "Under Servicing") return false;
+        if (activeFilter === "Ready for Delivery" && job.status !== "Ready for Delivery") return false;
+        if (activeFilter === "Payment Processing" && job.status !== "Payment Processing") return false;
+        if (activeFilter === "Completed" && job.status !== "Completed") return false;
+      }
+      // 2. Search query (regex or search string matches Customer name, Phone, or Vehicle No)
+      if (searchQuery.trim().length > 0) {
+        const q = searchQuery.toLowerCase();
+        const nameMatch = job.customerName.toLowerCase().includes(q);
+        const phoneMatch = job.phone.includes(q);
+        const vehicleMatch = job.vehicleNo.toLowerCase().includes(q);
+        const modelMatch = job.brandModel.toLowerCase().includes(q);
+        return nameMatch || phoneMatch || vehicleMatch || modelMatch;
+      }
+      return true;
+    })
+    .sort((a, b) => b.id.localeCompare(a.id));
 
   // Calculate quick stats for filters
   const stats = {
@@ -4338,150 +4360,183 @@ export default function Home() {
               ) : (
                 
                 /* Job Cards Grid */
-	                <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4">
+	                <div className="grid grid-cols-1 gap-4">
                   {filteredJobs.map((job) => {
-                    const isSelected = selectedJob && selectedJob.id === job.id;
+                    const isExpanded = selectedJob && selectedJob.id === job.id;
                     return (
                       <div
                         key={job.id}
                         onClick={() => {
-                          setSelectedJob(job);
-                          setIsSidePanelOpen(true);
-                          triggerToast(`Viewing Job Card ${job.id}`, "info");
+                          if (selectedJob?.id === job.id) {
+                            setSelectedJob(null);
+                          } else {
+                            setSelectedJob(job);
+                            triggerToast(`Job Card ${job.id} expanded`, "info");
+                          }
                         }}
-	                        className={`bg-white dark:bg-slate-800 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition-all duration-300 border relative overflow-hidden ${
-                          isSelected
+	                        className={`bg-white dark:bg-slate-800 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition-all duration-500 border relative overflow-hidden ${
+                          isExpanded
                             ? "ring-2 ring-green-600 dark:ring-green-500 border-transparent bg-slate-50/50 dark:bg-slate-800/80"
                             : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
                         } ${getUrgencyBorder(job.urgency)}`}
                       >
                         
-                        {/* Upper Header of the Card */}
-                        <div className="p-4 border-b border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-extrabold tracking-wide font-mono text-slate-900 dark:text-white">
-                              {job.vehicleNo}
-                            </span>
-	                            <span className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-0.5">
-                              {job.id}
-                            </span>
+                        {/* Upper Header of the Card (Always Visible) */}
+                        <div className="p-4 flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-extrabold tracking-wide font-mono text-slate-900 dark:text-white">
+                                {job.vehicleNo}
+                              </span>
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-tighter">
+                                {job.id}
+                              </span>
+                            </div>
+                            
+                            <div className="hidden sm:flex flex-col border-l border-slate-200 dark:border-slate-700 pl-4">
+                              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{job.customerName}</h3>
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold">{job.brandModel}</span>
+                            </div>
                           </div>
                           
-                          {/* Service Type badge */}
-                          <div className="flex items-center space-x-1.5">
-	                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                          <div className="flex items-center space-x-3">
+                            {/* Status badge (Minimal) */}
+                            <div className={`hidden sm:flex items-center border px-2.5 py-1 rounded-lg text-[10px] font-bold ${getStatusBadgeStyle(job.status)}`}>
+                              <span className="h-1.5 w-1.5 rounded-full bg-current mr-1.5 animate-pulse" />
+                              <span>{job.status}</span>
+                            </div>
+
+                            {/* Service Type badge */}
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                               job.serviceType === "Regular" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400" :
                               job.serviceType === "Accidental" ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400" :
                               "bg-purple-50 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400"
                             }`}>
                               {job.serviceType}
                             </span>
+
+                            {/* Expand/Collapse Icon */}
+                            <div className={`p-1.5 rounded-full transition-transform duration-300 ${isExpanded ? 'rotate-180 bg-slate-100 dark:bg-slate-700' : 'bg-slate-50 dark:bg-slate-900/50'}`}>
+                              <ChevronDown className="h-4 w-4 text-slate-400" />
+                            </div>
                           </div>
                         </div>
 
-                        {/* Customer & Vehicle Middle body */}
-                        <div className="p-4 space-y-3.5">
+                        {/* Expanded Content */}
+                        <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isExpanded ? 'max-h-[500px] opacity-100 border-t border-slate-100 dark:border-slate-700/60' : 'max-h-0 opacity-0'}`}>
                           
-                          {/* Customer Details */}
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{job.customerName}</h3>
-                              <div className="flex items-center text-xs text-slate-400 dark:text-slate-500 mt-1">
-                                <Phone className="h-3 w-3 mr-1" />
-                                <span>{job.phone}</span>
-                              </div>
-                            </div>
+                          {/* Middle Body */}
+                          <div className="p-4 space-y-4">
                             
-                            {/* Circular Completion percentage indicator */}
-                            <div className="relative flex items-center justify-center">
-                              <svg className="w-10 h-10 transform -rotate-95">
-                                <circle cx="20" cy="20" r="16" stroke="currentColor" className="text-slate-100 dark:text-slate-700" strokeWidth="3" fill="transparent" />
-                                <circle cx="20" cy="20" r="16" stroke="currentColor" className="text-green-500" strokeWidth="3" fill="transparent"
-                                  strokeDasharray={100}
-                                  strokeDashoffset={100 - job.completion}
-                                />
-                              </svg>
-                              <span className="absolute text-[10px] font-extrabold">{job.completion}%</span>
-                            </div>
-
-                          </div>
-
-                          {/* Brand/Model details & KMS */}
-                          <div className="bg-slate-50 dark:bg-slate-900/40 p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold">
-                            <span className="text-slate-700 dark:text-slate-300">{job.brandModel}</span>
-                            <span className="text-slate-400 dark:text-slate-500">{job.kms.toLocaleString()} KMS</span>
-                          </div>
-
-                          {/* Advisor & Technician information */}
-                          <div className="flex items-center justify-between pt-1.5">
-                            
-                            {/* Initials avatars */}
-                            <div className="flex items-center space-x-2">
-                              <div className="flex -space-x-2">
-                                <div className="h-7 w-7 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-white dark:border-slate-800 flex items-center justify-center text-[9px] font-extrabold text-slate-600 dark:text-slate-300" title={`Advisor: ${job.advisor}`}>
-                                  {job.advisor.split(' ').map(n=>n[0]).join('')}
-                                </div>
-                                <div className="h-7 w-7 rounded-full bg-green-100 dark:bg-green-950 border-2 border-white dark:border-slate-800 flex items-center justify-center text-[9px] font-extrabold text-green-600 dark:text-green-400" title={`Technician: ${job.technician}`}>
-                                  {job.technician.split(' ').map(n=>n[0]).join('')}
+                            <div className="flex flex-col sm:row sm:justify-between sm:items-start gap-4">
+                              <div className="flex flex-col sm:hidden">
+                                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{job.customerName}</h3>
+                                <div className="flex items-center text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                  <Phone className="h-3 w-3 mr-1" />
+                                  <span>{job.phone}</span>
                                 </div>
                               </div>
-                              <div className="flex flex-col text-[10px] leading-tight text-slate-400 dark:text-slate-500 font-medium">
-                                <span>Adv: {job.advisor.split(' ')[0]}</span>
-                                <span className="mt-0.5">Tech: {job.technician.split(' ')[0]}</span>
+
+                              <div className="flex justify-between w-full">
+                                <div className="hidden sm:flex items-center text-xs text-slate-400 dark:text-slate-500">
+                                  <Phone className="h-3 w-3 mr-1" />
+                                  <span>{job.phone}</span>
+                                </div>
+
+                                {/* Circular Completion percentage indicator */}
+                                <div className="relative flex items-center justify-center">
+                                  <svg className="w-10 h-10 transform -rotate-95">
+                                    <circle cx="20" cy="20" r="16" stroke="currentColor" className="text-slate-100 dark:text-slate-700" strokeWidth="3" fill="transparent" />
+                                    <circle cx="20" cy="20" r="16" stroke="currentColor" className="text-green-500" strokeWidth="3" fill="transparent"
+                                      strokeDasharray={100}
+                                      strokeDashoffset={100 - job.completion}
+                                    />
+                                  </svg>
+                                  <span className="absolute text-[10px] font-extrabold">{job.completion}%</span>
+                                </div>
                               </div>
                             </div>
 
-                            {/* Status badge */}
-                            <div className={`flex items-center border px-2 py-0.5 rounded-full text-[10px] font-bold ${getStatusBadgeStyle(job.status)}`}>
-                              <span className="h-1.5 w-1.5 rounded-full bg-current mr-1.5 animate-pulse" />
-                              <span>{job.status}</span>
+                            {/* Brand/Model details & KMS */}
+                            <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl flex items-center justify-between text-xs font-semibold">
+                              <span className="text-slate-700 dark:text-slate-300">{job.brandModel}</span>
+                              <span className="text-slate-400 dark:text-slate-500">{job.kms.toLocaleString()} KMS</span>
+                            </div>
+
+                            {/* Advisor & Technician information */}
+                            <div className="flex items-center justify-between pt-1">
+                              <div className="flex items-center space-x-2">
+                                <div className="flex -space-x-2">
+                                  <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-white dark:border-slate-800 flex items-center justify-center text-[10px] font-extrabold text-slate-600 dark:text-slate-300" title={`Advisor: ${job.advisor}`}>
+                                    {job.advisor.split(' ').map(n=>n[0]).join('')}
+                                  </div>
+                                  <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-950 border-2 border-white dark:border-slate-800 flex items-center justify-center text-[10px] font-extrabold text-green-600 dark:text-green-400" title={`Technician: ${job.technician}`}>
+                                    {job.technician.split(' ').map(n=>n[0]).join('')}
+                                  </div>
+                                </div>
+                                <div className="flex flex-col text-[10px] leading-tight text-slate-400 dark:text-slate-500 font-medium">
+                                  <span>Advisor: {job.advisor}</span>
+                                  <span className="mt-0.5">Technician: {job.technician}</span>
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setIsSidePanelOpen(true);
+                                  triggerToast("Opening comprehensive details view", "info");
+                                }}
+                                className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 text-[10px] font-bold hover:bg-indigo-100 transition-colors"
+                              >
+                                <Eye className="h-3 w-3" />
+                                <span>Full Details</span>
+                              </button>
                             </div>
 
                           </div>
 
-                        </div>
+                          {/* Bottom Row - Estimate | Paid | Due */}
+                          <div className="px-4 py-4 bg-slate-50/60 dark:bg-slate-900/20 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+                            
+                            <div className="flex space-x-6 font-semibold">
+                              <div className="flex flex-col">
+                                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-bold">Estimate</span>
+                                <span className="text-slate-800 dark:text-slate-200 mt-1 text-sm font-black">₹{job.estimate}</span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-bold">Paid</span>
+                                <span className="text-green-600 dark:text-green-400 mt-1 text-sm font-black">₹{job.paid}</span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-bold">Due</span>
+                                <span className="text-red-500 dark:text-red-400 mt-1 text-sm font-black">₹{job.due}</span>
+                              </div>
+                            </div>
 
-                        {/* Bottom Row - Estimate | Paid | Due */}
-                        <div className="px-4 py-3 bg-slate-50/60 dark:bg-slate-900/20 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
-                          
-                          <div className="flex space-x-4 font-semibold">
-                            <div className="flex flex-col">
-	                              <span className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide font-bold">Estimate</span>
-                              <span className="text-slate-800 dark:text-slate-200 mt-0.5">₹{job.estimate}</span>
+                            {/* Quick buttons */}
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  triggerToast(`Generating estimate printout for ${job.id}`, "success");
+                                  setTimeout(() => window.print(), 500);
+                                }}
+                                className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-[10px] font-black text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 transition-colors uppercase tracking-widest"
+                              >
+                                Estimate
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  triggerToast(`Processing invoice for ${job.id}`, "success");
+                                }}
+                                className="px-4 py-2 rounded-xl bg-green-600 text-white hover:bg-green-700 text-[10px] font-black transition-colors shadow-lg shadow-green-600/20 uppercase tracking-widest"
+                              >
+                                Pay
+                              </button>
                             </div>
-                            <div className="flex flex-col">
-	                              <span className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide font-bold">Paid</span>
-                              <span className="text-green-600 dark:text-green-400 mt-0.5">₹{job.paid}</span>
-                            </div>
-                            <div className="flex flex-col">
-	                              <span className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide font-bold">Due</span>
-                              <span className="text-red-500 dark:text-red-400 mt-0.5">₹{job.due}</span>
-                            </div>
+
                           </div>
-
-                          {/* Quick buttons */}
-                          <div className="flex space-x-1">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                triggerToast(`Generating estimate printout for ${job.id}`, "success");
-                                setTimeout(() => window.print(), 500);
-                              }}
-	                              className="px-2 py-1 rounded bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 transition-colors"
-                            >
-                              Estimate
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                triggerToast(`Processing invoice for ${job.id}`, "success");
-                              }}
-	                              className="px-2 py-1 rounded bg-green-600 text-white hover:bg-green-700 text-xs font-bold transition-colors"
-                            >
-                              Pay
-                            </button>
-                          </div>
-
                         </div>
 
                       </div>
@@ -6543,445 +6598,445 @@ export default function Home() {
               </div>
 
               {/* Form Content */}
-              <form onSubmit={handleRegisterSubmit} className="p-6 flex flex-col md:flex-row gap-6 max-h-[70vh] overflow-y-auto">
-                
-                {/* Column 1: Customer Details */}
-                <div className="flex-1 space-y-4">
-                  <h3 className="text-xs font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">
-                    Customer Context
-                  </h3>
+              <form onSubmit={handleRegisterSubmit} className="flex flex-col h-[70vh]">
+                <div className="p-6 flex flex-col md:flex-row gap-6 overflow-y-auto flex-1">
                   
-                  {/* Name field */}
-                  <div className="flex flex-col">
-                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                      Customer Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={newCustomerForm.name}
-                      onChange={(e) => setNewCustomerForm({ ...newCustomerForm, name: e.target.value })}
-                      placeholder="e.g. Aditya Pradhan"
-                      className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-500/80 transition-all font-semibold"
-                    />
-                  </div>
-
-                  {/* Phone and alternate */}
-                  <div className="grid grid-cols-2 gap-3.5">
+                  {/* Column 1: Customer Details */}
+                  <div className="flex-1 space-y-4">
+                    <h3 className="text-xs font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">
+                      Customer Context
+                    </h3>
+                    
+                    {/* Name field */}
                     <div className="flex flex-col">
                       <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                        Mobile Phone <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative flex">
-                        <select className="px-2 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs rounded-l-xl focus:outline-none font-bold">
-                          <option>+91 (IN)</option>
-                          <option>+1 (US)</option>
-                        </select>
-                        <input
-                          type="tel"
-                          required
-                          value={newCustomerForm.phone}
-                          onChange={(e) => setNewCustomerForm({ ...newCustomerForm, phone: e.target.value })}
-                          placeholder="98765 43210"
-                          className="w-full px-3.5 py-2.5 rounded-r-xl border-y border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                        Alternate No.
-                      </label>
-                      <input
-                        type="tel"
-                        value={newCustomerForm.altPhone}
-                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, altPhone: e.target.value })}
-                        placeholder="e.g. +91 900..."
-                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Email & GSTIN */}
-                  <div className="flex flex-col">
-                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      value={newCustomerForm.email}
-                      onChange={(e) => setNewCustomerForm({ ...newCustomerForm, email: e.target.value })}
-                      placeholder="e.g. name@domain.com"
-                      className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
-                    />
-                  </div>
-
-                  {/* Customer Source with Inline '+' Modal */}
-                  <div className="grid grid-cols-2 gap-3.5">
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
-                        <span>Customer Source</span>
-                        <button
-                          type="button"
-                          onClick={() => setIsNewSourceModalOpen(true)}
-                          className="text-[10px] text-green-500 hover:text-green-600 font-extrabold"
-                        >
-                          + New
-                        </button>
-                      </label>
-                      <select
-                        value={newCustomerForm.source}
-                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, source: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
-                      >
-                        {customerSources.map((src, i) => (
-                          <option key={i} value={src}>{src}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                        Customer Type
-                      </label>
-                      <select
-                        value={newCustomerForm.customerType}
-                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, customerType: e.target.value })}
-                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
-                      >
-                        <option value="individual">Individual</option>
-                        <option value="corporate">Corporate (GST)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Address */}
-                  <div className="flex flex-col">
-                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                      Billing Address
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={newCustomerForm.address}
-                      onChange={(e) => setNewCustomerForm({ ...newCustomerForm, address: e.target.value })}
-                      placeholder="Enter full address..."
-                      className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
-                    />
-                  </div>
-
-                  {/* Technician & Supervisor with Inline Modals */}
-                  <div className="grid grid-cols-2 gap-3.5">
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
-                        <span>Supervisor</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEmployeeRoleType("supervisor");
-                            setIsNewEmployeeModalOpen(true);
-                          }}
-                          className="text-[9px] text-green-500 hover:text-green-600 font-bold"
-                        >
-                          + New
-                        </button>
-                      </label>
-                      <select
-                        value={newCustomerForm.supervisor}
-                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, supervisor: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
-                      >
-                        {supervisorsList.map((sup, i) => (
-                          <option key={i} value={sup}>{sup}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
-                        <span>Technician</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEmployeeRoleType("technician");
-                            setIsNewEmployeeModalOpen(true);
-                          }}
-                          className="text-[9px] text-green-500 hover:text-green-600 font-bold"
-                        >
-                          + New
-                        </button>
-                      </label>
-                      <select
-                        value={newCustomerForm.technician}
-                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, technician: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
-                      >
-                        {techniciansList.map((tech, i) => (
-                          <option key={i} value={tech}>{tech}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Column 2: Vehicle details */}
-                <div className="flex-1 space-y-4 relative">
-                  <h3 className="text-xs font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">
-                    Vehicle Context
-                  </h3>
-
-                  {/* Reg No & Odometer */}
-                  <div className="grid grid-cols-2 gap-3.5">
-                    <div className="flex flex-col relative">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                        Registration No <span className="text-red-500">*</span>
+                        Customer Name <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         required
-                        value={newCustomerForm.regNo}
-                        onChange={handleRegNoChange}
-                        placeholder="e.g. OD-05-AB-1234"
-                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all uppercase font-mono font-bold tracking-wider"
+                        value={newCustomerForm.name}
+                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, name: e.target.value })}
+                        placeholder="e.g. Aditya Pradhan"
+                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-500/80 transition-all font-semibold"
                       />
-                      {showRegSuggestions && (
+                    </div>
+
+                    {/* Phone and alternate */}
+                    <div className="grid grid-cols-2 gap-3.5">
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                          Mobile Phone <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative flex">
+                          <select className="px-2 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs rounded-l-xl focus:outline-none font-bold">
+                            <option>+91 (IN)</option>
+                            <option>+1 (US)</option>
+                          </select>
+                          <input
+                            type="tel"
+                            required
+                            value={newCustomerForm.phone}
+                            onChange={(e) => setNewCustomerForm({ ...newCustomerForm, phone: e.target.value })}
+                            placeholder="98765 43210"
+                            className="w-full px-3.5 py-2.5 rounded-r-xl border-y border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                          Alternate No.
+                        </label>
+                        <input
+                          type="tel"
+                          value={newCustomerForm.altPhone}
+                          onChange={(e) => setNewCustomerForm({ ...newCustomerForm, altPhone: e.target.value })}
+                          placeholder="e.g. +91 900..."
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Email & GSTIN */}
+                    <div className="flex flex-col">
+                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                        Email Address
+                      </label>
+                      <input
+                        type="email"
+                        value={newCustomerForm.email}
+                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, email: e.target.value })}
+                        placeholder="e.g. name@domain.com"
+                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+                      />
+                    </div>
+
+                    {/* Customer Source with Inline '+' Modal */}
+                    <div className="grid grid-cols-2 gap-3.5">
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
+                          <span>Customer Source</span>
+                          <button
+                            type="button"
+                            onClick={() => setIsNewSourceModalOpen(true)}
+                            className="text-[10px] text-green-500 hover:text-green-600 font-extrabold"
+                          >
+                            + New
+                          </button>
+                        </label>
+                        <select
+                          value={newCustomerForm.source}
+                          onChange={(e) => setNewCustomerForm({ ...newCustomerForm, source: e.target.value })}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
+                        >
+                          {customerSources.map((src, i) => (
+                            <option key={i} value={src}>{src}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                          Customer Type
+                        </label>
+                        <select
+                          value={newCustomerForm.customerType}
+                          onChange={(e) => setNewCustomerForm({ ...newCustomerForm, customerType: e.target.value })}
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
+                        >
+                          <option value="individual">Individual</option>
+                          <option value="corporate">Corporate (GST)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Address */}
+                    <div className="flex flex-col">
+                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                        Billing Address
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={newCustomerForm.address}
+                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, address: e.target.value })}
+                        placeholder="Enter full address..."
+                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+                      />
+                    </div>
+
+                    {/* Technician & Supervisor with Inline Modals */}
+                    <div className="grid grid-cols-2 gap-3.5">
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
+                          <span>Supervisor</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEmployeeRoleType("supervisor");
+                              setIsNewEmployeeModalOpen(true);
+                            }}
+                            className="text-[9px] text-green-500 hover:text-green-600 font-bold"
+                          >
+                            + New
+                          </button>
+                        </label>
+                        <select
+                          value={newCustomerForm.supervisor}
+                          onChange={(e) => setNewCustomerForm({ ...newCustomerForm, supervisor: e.target.value })}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
+                        >
+                          {supervisorsList.map((sup, i) => (
+                            <option key={i} value={sup}>{sup}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
+                          <span>Technician</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEmployeeRoleType("technician");
+                              setIsNewEmployeeModalOpen(true);
+                            }}
+                            className="text-[9px] text-green-500 hover:text-green-600 font-bold"
+                          >
+                            + New
+                          </button>
+                        </label>
+                        <select
+                          value={newCustomerForm.technician}
+                          onChange={(e) => setNewCustomerForm({ ...newCustomerForm, technician: e.target.value })}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
+                        >
+                          {techniciansList.map((tech, i) => (
+                            <option key={i} value={tech}>{tech}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Column 2: Vehicle details */}
+                  <div className="flex-1 space-y-4 relative">
+                    <h3 className="text-xs font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">
+                      Vehicle Context
+                    </h3>
+
+                    {/* Reg No & Odometer */}
+                    <div className="grid grid-cols-2 gap-3.5">
+                      <div className="flex flex-col relative">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                          Registration No <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={newCustomerForm.regNo}
+                          onChange={handleRegNoChange}
+                          placeholder="e.g. OD-05-AB-1234"
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all uppercase font-mono font-bold tracking-wider"
+                        />
+                        {showRegSuggestions && (
+                          <div className="absolute left-0 right-0 top-16 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 p-1.5 space-y-0.5 max-h-48 overflow-y-auto">
+                            {matchingRegNoList.map((veh, idx) => (
+                              <div
+                                key={idx}
+                                onClick={() => selectRegNoSuggestion(veh)}
+                                className="p-2.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-xs flex justify-between cursor-pointer border-b border-slate-100 dark:border-slate-800 last:border-b-0"
+                              >
+                                <div className="flex flex-col">
+                                  <span className="font-extrabold text-green-600 dark:text-green-400 font-mono tracking-wider">{veh.regNo}</span>
+                                  <span className="text-[9px] text-slate-400 mt-0.5">{veh.name} • {veh.phone}</span>
+                                </div>
+                                <span className="text-[10px] text-slate-500 self-center font-bold">{veh.brand} {veh.model}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                          Kilometer Driven
+                        </label>
+                        <input
+                          type="number"
+                          value={newCustomerForm.odometer}
+                          onChange={(e) => setNewCustomerForm({ ...newCustomerForm, odometer: e.target.value })}
+                          placeholder="e.g. 12450"
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Brand & Model Search Typeahead dropdown */}
+                    <div className="flex flex-col relative">
+                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
+                        <span>Search Brand & Model *</span>
+                        <button
+                          type="button"
+                          onClick={() => setIsNewVehicleModalOpen(true)}
+                          className="text-[10px] text-green-500 hover:text-green-600 font-extrabold flex items-center space-x-0.5 bg-transparent border-0 cursor-pointer"
+                        >
+                          <Plus className="h-3 w-3" />
+                          <span>Add Custom Vehicle</span>
+                        </button>
+                      </label>
+                      <div className="relative">
+                        <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+                        <input
+                          type="text"
+                          value={vehicleSearchText}
+                          onChange={handleVehicleSearchChange}
+                          placeholder="Type to search standard database..."
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+                        />
+                      </div>
+
+                      {/* Suggestions list popup */}
+                      {showVehicleSuggestions && (
                         <div className="absolute left-0 right-0 top-16 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 p-1.5 space-y-0.5 max-h-48 overflow-y-auto">
-                          {matchingRegNoList.map((veh, idx) => (
+                          {MOCK_VEHICLE_DATABASE.filter(v =>
+                            v.brand.toLowerCase().includes(vehicleSearchText.toLowerCase()) ||
+                            v.model.toLowerCase().includes(vehicleSearchText.toLowerCase())
+                          ).map((v, idx) => (
                             <div
                               key={idx}
-                              onClick={() => selectRegNoSuggestion(veh)}
-                              className="p-2.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-xs flex justify-between cursor-pointer border-b border-slate-100 dark:border-slate-800 last:border-b-0"
+                              onClick={() => selectVehicleSuggestion(v)}
+                              className="p-2.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-semibold flex justify-between cursor-pointer"
                             >
-                              <div className="flex flex-col">
-                                <span className="font-extrabold text-green-600 dark:text-green-400 font-mono tracking-wider">{veh.regNo}</span>
-                                <span className="text-[9px] text-slate-400 mt-0.5">{veh.name} • {veh.phone}</span>
-                              </div>
-                              <span className="text-[10px] text-slate-500 self-center font-bold">{veh.brand} {veh.model}</span>
+                              <span>{v.brand} {v.model}</span>
+                              <span className="text-slate-400 text-[10px]">{v.category} • {v.variant}</span>
                             </div>
                           ))}
                         </div>
                       )}
                     </div>
+
+                    {/* Brand & Model Read-only details from typeahead selection */}
+                    <div className="grid grid-cols-2 gap-3.5">
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                          Brand
+                        </label>
+                        <input
+                          type="text"
+                          readOnly
+                          value={newCustomerForm.brand}
+                          placeholder="Auto-populated"
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-sm cursor-not-allowed focus:outline-none font-bold"
+                        />
+                      </div>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                          Model
+                        </label>
+                        <input
+                          type="text"
+                          readOnly
+                          value={newCustomerForm.model}
+                          placeholder="Auto-populated"
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-sm cursor-not-allowed focus:outline-none font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Vehicle variant & category */}
+                    <div className="grid grid-cols-2 gap-3.5">
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                          Variant
+                        </label>
+                        <input
+                          type="text"
+                          value={newCustomerForm.variant}
+                          onChange={(e) => setNewCustomerForm({ ...newCustomerForm, variant: e.target.value })}
+                          placeholder="e.g. Standard"
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
+                        />
+                      </div>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
+                          <span>Vehicle Category *</span>
+                          <button
+                            type="button"
+                            onClick={() => setIsNewCategoryModalOpen(true)}
+                            className="text-[9px] text-green-500 hover:text-green-600 font-bold"
+                          >
+                            + New
+                          </button>
+                        </label>
+                        <select
+                          value={newCustomerForm.category}
+                          onChange={(e) => setNewCustomerForm({ ...newCustomerForm, category: e.target.value })}
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
+                        >
+                          {vehicleCategories.map((cat, i) => (
+                            <option key={i} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Number Plate Color with Meaning Modal Trigger */}
+                    <div className="grid grid-cols-2 gap-3.5">
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
+                          <span>Number Plate Color *</span>
+                          <button
+                            type="button"
+                            onClick={() => setIsPlateInfoModalOpen(true)}
+                            className="text-[9px] text-green-500 hover:text-green-600 font-extrabold flex items-center bg-transparent border-0 cursor-pointer"
+                          >
+                            <Info className="h-3 w-3 mr-0.5" /> Meaning
+                          </button>
+                        </label>
+                        <select
+                          value={newCustomerForm.plateColor}
+                          onChange={(e) => setNewCustomerForm({ ...newCustomerForm, plateColor: e.target.value })}
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-bold"
+                        >
+                          <option value="white">White Plate (Private Vehicles)</option>
+                          <option value="yellow">Yellow Plate (Commercial Vehicles)</option>
+                          <option value="green">Green Plate (EVs Private)</option>
+                          <option value="black">Black Plate (Rentals / Self-drive)</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                          Manufactured Year
+                        </label>
+                        <input
+                          type="number"
+                          value={newCustomerForm.mfgYear}
+                          onChange={(e) => setNewCustomerForm({ ...newCustomerForm, mfgYear: e.target.value })}
+                          placeholder="e.g. 2025"
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Chassis VIN and Engine No */}
+                    <div className="grid grid-cols-2 gap-3.5">
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                          Chassis Number / VIN
+                        </label>
+                        <input
+                          type="text"
+                          value={newCustomerForm.chassisNo}
+                          onChange={(e) => setNewCustomerForm({ ...newCustomerForm, chassisNo: e.target.value })}
+                          placeholder="e.g. MD2A..."
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-mono uppercase"
+                        />
+                      </div>
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                          Engine Number
+                        </label>
+                        <input
+                          type="text"
+                          value={newCustomerForm.engineNo}
+                          onChange={(e) => setNewCustomerForm({ ...newCustomerForm, engineNo: e.target.value })}
+                          placeholder="e.g. JA05E..."
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-mono uppercase"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Date Of Registration */}
                     <div className="flex flex-col">
                       <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                        Kilometer Driven
+                        Date Of Registration
                       </label>
                       <input
-                        type="number"
-                        value={newCustomerForm.odometer}
-                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, odometer: e.target.value })}
-                        placeholder="e.g. 12450"
+                        type="date"
+                        value={newCustomerForm.regDate}
+                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, regDate: e.target.value })}
                         className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
                       />
                     </div>
+
                   </div>
-
-                  {/* Brand & Model Search Typeahead dropdown */}
-                  <div className="flex flex-col relative">
-                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
-                      <span>Search Brand & Model *</span>
-                      <button
-                        type="button"
-                        onClick={() => setIsNewVehicleModalOpen(true)}
-                        className="text-[10px] text-green-500 hover:text-green-600 font-extrabold flex items-center space-x-0.5 bg-transparent border-0 cursor-pointer"
-                      >
-                        <Plus className="h-3 w-3" />
-                        <span>Add Custom Vehicle</span>
-                      </button>
-                    </label>
-                    <div className="relative">
-                      <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
-                      <input
-                        type="text"
-                        value={vehicleSearchText}
-                        onChange={handleVehicleSearchChange}
-                        placeholder="Type to search standard database..."
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
-                      />
-                    </div>
-
-                    {/* Suggestions list popup */}
-                    {showVehicleSuggestions && (
-                      <div className="absolute left-0 right-0 top-16 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 p-1.5 space-y-0.5 max-h-48 overflow-y-auto">
-                        {MOCK_VEHICLE_DATABASE.filter(v =>
-                          v.brand.toLowerCase().includes(vehicleSearchText.toLowerCase()) ||
-                          v.model.toLowerCase().includes(vehicleSearchText.toLowerCase())
-                        ).map((v, idx) => (
-                          <div
-                            key={idx}
-                            onClick={() => selectVehicleSuggestion(v)}
-                            className="p-2.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-semibold flex justify-between cursor-pointer"
-                          >
-                            <span>{v.brand} {v.model}</span>
-                            <span className="text-slate-400 text-[10px]">{v.category} • {v.variant}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Brand & Model Read-only details from typeahead selection */}
-                  <div className="grid grid-cols-2 gap-3.5">
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                        Brand
-                      </label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={newCustomerForm.brand}
-                        placeholder="Auto-populated"
-                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-sm cursor-not-allowed focus:outline-none font-bold"
-                      />
-                    </div>
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                        Model
-                      </label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={newCustomerForm.model}
-                        placeholder="Auto-populated"
-                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-sm cursor-not-allowed focus:outline-none font-bold"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Vehicle variant & category */}
-                  <div className="grid grid-cols-2 gap-3.5">
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                        Variant
-                      </label>
-                      <input
-                        type="text"
-                        value={newCustomerForm.variant}
-                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, variant: e.target.value })}
-                        placeholder="e.g. Standard"
-                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
-                      />
-                    </div>
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
-                        <span>Vehicle Category *</span>
-                        <button
-                          type="button"
-                          onClick={() => setIsNewCategoryModalOpen(true)}
-                          className="text-[9px] text-green-500 hover:text-green-600 font-bold"
-                        >
-                          + New
-                        </button>
-                      </label>
-                      <select
-                        value={newCustomerForm.category}
-                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, category: e.target.value })}
-                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
-                      >
-                        {vehicleCategories.map((cat, i) => (
-                          <option key={i} value={cat}>{cat}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Number Plate Color with Meaning Modal Trigger */}
-                  <div className="grid grid-cols-2 gap-3.5">
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
-                        <span>Number Plate Color *</span>
-                        <button
-                          type="button"
-                          onClick={() => setIsPlateInfoModalOpen(true)}
-                          className="text-[9px] text-green-500 hover:text-green-600 font-extrabold flex items-center bg-transparent border-0 cursor-pointer"
-                        >
-                          <Info className="h-3 w-3 mr-0.5" /> Meaning
-                        </button>
-                      </label>
-                      <select
-                        value={newCustomerForm.plateColor}
-                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, plateColor: e.target.value })}
-                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-bold"
-                      >
-                        <option value="white">White Plate (Private Vehicles)</option>
-                        <option value="yellow">Yellow Plate (Commercial Vehicles)</option>
-                        <option value="green">Green Plate (EVs Private)</option>
-                        <option value="black">Black Plate (Rentals / Self-drive)</option>
-                      </select>
-                    </div>
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                        Manufactured Year
-                      </label>
-                      <input
-                        type="number"
-                        value={newCustomerForm.mfgYear}
-                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, mfgYear: e.target.value })}
-                        placeholder="e.g. 2025"
-                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Chassis VIN and Engine No */}
-                  <div className="grid grid-cols-2 gap-3.5">
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                        Chassis Number / VIN
-                      </label>
-                      <input
-                        type="text"
-                        value={newCustomerForm.chassisNo}
-                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, chassisNo: e.target.value })}
-                        placeholder="e.g. MD2A..."
-                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-mono uppercase"
-                      />
-                    </div>
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                        Engine Number
-                      </label>
-                      <input
-                        type="text"
-                        value={newCustomerForm.engineNo}
-                        onChange={(e) => setNewCustomerForm({ ...newCustomerForm, engineNo: e.target.value })}
-                        placeholder="e.g. JA05E..."
-                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-mono uppercase"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Date Of Registration */}
-                  <div className="flex flex-col">
-                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                      Date Of Registration
-                    </label>
-                    <input
-                      type="date"
-                      value={newCustomerForm.regDate}
-                      onChange={(e) => setNewCustomerForm({ ...newCustomerForm, regDate: e.target.value })}
-                      className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
-                    />
-                  </div>
-
                 </div>
 
+                {/* Action buttons at bottom */}
+                <div className="p-4 border-t border-slate-200 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900/30 flex items-center justify-end space-x-3.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-sm hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-sm transition-colors shadow-md shadow-green-600/10 active:scale-95"
+                  >
+                    Register Customer
+                  </button>
+                </div>
               </form>
-
-              {/* Action buttons at bottom */}
-              <div className="p-4 border-t border-slate-200 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900/30 flex items-center justify-end space-x-3.5">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-sm hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRegisterSubmit}
-                  className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-sm transition-colors shadow-md shadow-green-600/10 active:scale-95"
-                >
-                  Register Customer
-                </button>
-              </div>
 
             </div>
           </div>
@@ -8823,19 +8878,25 @@ export default function Home() {
           {toasts.map((toast) => (
             <div
               key={toast.id}
-              className={`p-4 rounded-2xl shadow-xl flex items-start space-x-3.5 animate-in slide-in-from-bottom-6 duration-300 pointer-events-auto border ${
-                toast.type === "success" ? "bg-green-600 text-white border-green-500 shadow-green-600/10" :
-                toast.type === "warn" ? "bg-red-500 text-white border-red-400 shadow-red-500/10" :
-                "bg-slate-800 text-slate-100 dark:bg-slate-700 border-slate-700 dark:border-slate-600 shadow-slate-900/20"
+              className={`p-4 rounded-2xl shadow-xl flex items-start space-x-3.5 animate-in slide-in-from-bottom-6 duration-300 pointer-events-auto border-2 ${
+                toast.type === "success" ? "bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-green-500 shadow-green-500/5" :
+                toast.type === "warn" ? "bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-red-500 shadow-red-500/5" :
+                "bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700 shadow-slate-200/20"
               }`}
             >
-              {toast.type === "success" ? <CheckCircle className="h-5 w-5 mt-0.5 shrink-0" /> : <Info className="h-5 w-5 mt-0.5 shrink-0" />}
-              <div className="text-xs font-semibold flex-1 leading-relaxed">
+              {toast.type === "success" ? (
+                <CheckCircle className="h-5 w-5 mt-0.5 shrink-0 text-green-500" />
+              ) : toast.type === "warn" ? (
+                <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0 text-red-500" />
+              ) : (
+                <Info className="h-5 w-5 mt-0.5 shrink-0 text-blue-500" />
+              )}
+              <div className="text-xs font-bold flex-1 leading-relaxed">
                 {toast.msg}
               </div>
               <button
                 onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
-                className="text-white/70 hover:text-white transition-colors"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>

@@ -64,6 +64,11 @@ export class AppController {
     return this.appService.createEmployee(name, role);
   }
 
+  @Get('employees')
+  getEmployees() {
+    return this.appService.getEmployees();
+  }
+
   // ============================================================
   // SPEC 5: SERVICE QUEUE
   // ============================================================

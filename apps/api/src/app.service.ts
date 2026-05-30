@@ -327,6 +327,10 @@ export class AppService {
   
   getTechProductivity() { return this.techProductivityList; }
 
+  getEmployees(): Employee[] {
+    return this.employees;
+  }
+
   validateLogin(credentials: any) {
     if (credentials.username === 'admin' && credentials.password === 'password123') {
       return { success: true, user: { name: 'Aditya Pradhan', role: 'Super Admin' } };

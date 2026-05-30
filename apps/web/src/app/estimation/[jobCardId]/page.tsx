@@ -1663,22 +1663,22 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
       {/* ============================================================ */}
       {isEstTypeModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-800 rounded-3xl border border-slate-700 w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-6 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-700 pb-3">
-              <div className="flex items-center space-x-2 text-green-400">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+              <div className="flex items-center space-x-2 text-green-600 dark:text-green-400">
                 <Printer className="h-5 w-5" />
-                <h3 className="text-sm font-black uppercase tracking-wider">Select Print Format</h3>
+                <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 dark:text-white">Select Print Format</h3>
               </div>
               <button
                 onClick={() => setIsEstTypeModalOpen(false)}
-                className="p-1 rounded hover:bg-slate-700 text-slate-400"
+                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             
             <div className="space-y-4">
-              <label className="flex items-center p-4 bg-slate-900/60 hover:bg-slate-900 rounded-2xl border border-slate-700 cursor-pointer transition-all">
+              <label className="flex items-center p-4 bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 cursor-pointer transition-all">
                 <input
                   type="radio"
                   name="estType"
@@ -1688,12 +1688,12 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
                   className="h-4 w-4 text-green-500 focus:ring-green-500/20"
                 />
                 <div className="ml-3">
-                  <span className="text-xs font-black text-white block">All Inclusive Estimate</span>
-                  <span className="text-[10px] text-slate-400 mt-1 block">Taxes are integrated into item unit prices. Sleek and clean.</span>
+                  <span className="text-xs font-black text-slate-800 dark:text-white block">All Inclusive Estimate</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">Taxes are integrated into item unit prices. Sleek and clean.</span>
                 </div>
               </label>
 
-              <label className="flex items-center p-4 bg-slate-900/60 hover:bg-slate-900 rounded-2xl border border-slate-700 cursor-pointer transition-all">
+              <label className="flex items-center p-4 bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 cursor-pointer transition-all">
                 <input
                   type="radio"
                   name="estType"
@@ -1703,8 +1703,8 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
                   className="h-4 w-4 text-green-500 focus:ring-green-500/20"
                 />
                 <div className="ml-3">
-                  <span className="text-xs font-black text-white block">Tax-Estimation (Broken down GST)</span>
-                  <span className="text-[10px] text-slate-400 mt-1 block">Standard invoice with broken out 9% CGST + 9% SGST lines.</span>
+                  <span className="text-xs font-black text-slate-800 dark:text-white block">Tax-Estimation (Broken down GST)</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">Standard invoice with broken out 9% CGST + 9% SGST lines.</span>
                 </div>
               </label>
             </div>
@@ -1712,7 +1712,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
             <div className="flex justify-end space-x-3 pt-2">
               <button
                 onClick={() => setIsEstTypeModalOpen(false)}
-                className="px-4 py-2 rounded-xl border border-slate-700 text-slate-350 font-bold text-xs"
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-350 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-700"
               >
                 Cancel
               </button>
@@ -1721,7 +1721,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
                   setIsEstTypeModalOpen(false);
                   handlePrintPdf();
                 }}
-                className="px-5 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-slate-900 font-extrabold text-xs"
+                className="px-5 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-slate-900 font-extrabold text-xs shadow-lg shadow-green-500/20"
               >
                 Compile Format
               </button>
