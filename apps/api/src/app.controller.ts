@@ -118,6 +118,16 @@ export class AppController {
     return { ok: true };
   }
 
+  @Get('job-cards/:id/estimation-context')
+  async getEstimationContext(@Param('id') id: string) {
+    return this.appService.getEstimationContext(id);
+  }
+
+  @Post('job-cards/:id/estimation')
+  async saveEstimation(@Param('id') id: string, @Body() body: any) {
+    return this.appService.saveEstimation(id, body);
+  }
+
   @Get('packages')
   async getPackages(): Promise<PackageDto[]> {
     return this.appService.getPackages();

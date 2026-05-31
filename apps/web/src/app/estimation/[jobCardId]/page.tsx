@@ -284,53 +284,38 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
     setRejectedItems([{ type: "complaint", name: "Spark plug gap adjustment", reason: "Declined: Customer wants to do it next service" }]);
   };
 
-  // Load core details on mount
+  // Load all estimation context in a single API call
   useEffect(() => {
     const loadData = async () => {
       try {
         const authHeaders = getAuthHeaders();
-        // Run catalog fetch independently so its errors don't abort job load
-        fetch(`${API_BASE_URL}/spare-parts/search?q=`, { headers: authHeaders })
-          .then(r => r.ok ? r.json() : []).then(setSparesCatalog).catch(() => {});
-        fetch(`${API_BASE_URL}/services/search?q=`, { headers: authHeaders })
-          .then(r => r.ok ? r.json() : []).then(setServicesCatalog).catch(() => {});
+        const res = await fetch(`${API_BASE_URL}/job-cards/${jobCardId}/estimation-context`, { headers: authHeaders });
+        if (!res.ok) { triggerToast("Job card not found in DB", "warn"); loadFallbackJob(); return; }
 
-        const [jobRes, pkgRes, offerRes, empRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/job-cards/${jobCardId}`, { headers: authHeaders }),
-          fetch(`${API_BASE_URL}/packages`, { headers: authHeaders }),
-          fetch(`${API_BASE_URL}/offers`, { headers: authHeaders }),
-          fetch(`${API_BASE_URL}/employees`, { headers: authHeaders }),
-        ]);
+        const ctx = await res.json();
+        const { jobCard, complaints, packages, offers, employees, spareCatalog, serviceCatalog } = ctx;
 
-        if (pkgRes.ok) setPackagesMaster(await pkgRes.json());
-        if (offerRes.ok) setOffersMaster(await offerRes.json());
-        if (empRes.ok) setEmployeesList(await empRes.json());
-
-        if (jobRes.ok) {
-          const jobData = await jobRes.json();
-          setJob(jobData);
-          setAllocatedSpares(jobData.spares.map((s: SpareItem) => ({ ...s, billedTo: s.billedTo || "customer" })));
-          setAllocatedServices(jobData.services.map((s: ServiceItem) => ({ ...s, billedTo: s.billedTo || "customer" })));
-
-          // Load complaints from dedicated endpoint
-          const cmpRes = await fetch(`${API_BASE_URL}/job-cards/${jobCardId}/complaints`, { headers: authHeaders });
-          const complaints: Complaint[] = cmpRes.ok ? await cmpRes.json() : (jobData.complaints || []);
-          setAllocatedComplaints(complaints);
-          setRejectedItems(complaints.filter((c: Complaint) => c.action === "declined").map((c: Complaint) => ({ type: "complaint", name: c.text, reason: c.finding || "Declined by customer" })));
-        } else {
-          triggerToast("Using offline data — job card not found in DB", "warn");
-          loadFallbackJob();
-        }
+        setJob(jobCard);
+        setAllocatedSpares((jobCard.spares || []).map((s: SpareItem) => ({ ...s, billedTo: s.billedTo || "customer" })));
+        setAllocatedServices((jobCard.services || []).map((s: ServiceItem) => ({ ...s, billedTo: s.billedTo || "customer" })));
+        setAllocatedComplaints(complaints || []);
+        setRejectedItems((complaints || []).filter((c: Complaint) => c.action === "declined").map((c: Complaint) => ({ type: "complaint", name: c.text, reason: c.finding || "Declined by customer" })));
+        setPackagesMaster(packages || []);
+        setOffersMaster(offers || []);
+        setEmployeesList(employees || []);
+        setSparesCatalog(spareCatalog || []);
+        setServicesCatalog(serviceCatalog || []);
       } catch (err) {
-        console.error("Backend offline. Simulating estimation data.", err);
+        console.error("Backend error loading estimation context:", err);
         loadFallbackJob();
       }
     };
     loadData();
   }, [jobCardId]);
 
-  // Fetch catalogs dynamically
+  // Fetch catalogs dynamically (search as user types)
   const fetchCatalog = async (q: string) => {
+    if (!q) return;
     try {
       const authHeaders = getAuthHeaders();
       const [sparesRes, servicesRes] = await Promise.all([
@@ -340,7 +325,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
       if (sparesRes.ok) setSparesCatalog(await sparesRes.json());
       if (servicesRes.ok) setServicesCatalog(await servicesRes.json());
     } catch (err) {
-      console.error("Catalog fetch failed", err);
+      console.error("Catalog search failed", err);
     }
   };
 
@@ -540,35 +525,38 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
   const netTotal = subtotal + gstAmount;
 
   // Save the entire Estimate (spares, services, complaints) to the database
-  const handleSaveEstimate = async () => {
-    if (!job) return;
+  const handleSaveEstimate = async (): Promise<boolean> => {
+    if (!job) { triggerToast("Job card not loaded yet", "warn"); return false; }
     try {
-      const headers = { "Content-Type": "application/json", ...getAuthHeaders() };
-      const [sparesRes, servicesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/job-cards/${job.id}/spare-items`, {
-          method: "POST", headers, body: JSON.stringify({ items: allocatedSpares }),
+      const res = await fetch(`${API_BASE_URL}/job-cards/${job.id}/estimation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({
+          spares: allocatedSpares,
+          services: allocatedServices,
+          complaints: allocatedComplaints,
+          isEstimated: allocatedSpares.length > 0 || allocatedServices.length > 0,
+          completion: Math.max(job.completion || 10, 20),
+          overallDiscount: discountAmount,
         }),
-        fetch(`${API_BASE_URL}/job-cards/${job.id}/service-items`, {
-          method: "POST", headers, body: JSON.stringify({ items: allocatedServices }),
-        }),
-        fetch(`${API_BASE_URL}/job-cards/${job.id}/complaints`, {
-          method: "POST", headers, body: JSON.stringify({ complaints: allocatedComplaints }),
-        }),
-        fetch(`${API_BASE_URL}/job-cards/${job.id}`, {
-          method: "PATCH", headers, body: JSON.stringify({ isEstimated: allocatedSpares.length > 0 || allocatedServices.length > 0, completion: Math.max(job.completion || 10, 20), overallDiscount: discountAmount }),
-        }),
-      ]);
-
-      if (sparesRes.ok && servicesRes.ok) {
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setJob(updated);
+        setAllocatedSpares((updated.spares || []).map((s: SpareItem) => ({ ...s, billedTo: s.billedTo || "customer" })));
+        setAllocatedServices((updated.services || []).map((s: ServiceItem) => ({ ...s, billedTo: s.billedTo || "customer" })));
         triggerToast("Draft saved to database!", "success");
-        const updatedRes = await fetch(`${API_BASE_URL}/job-cards/${job.id}`, { headers: getAuthHeaders() });
-        if (updatedRes.ok) setJob(await updatedRes.json());
+        return true;
       } else {
-        triggerToast("Failed to save some changes", "warn");
+        const err = await res.text();
+        console.error("Save estimation failed:", res.status, err);
+        triggerToast(`Save failed (${res.status})`, "warn");
+        return false;
       }
     } catch (err) {
-      console.error(err);
-      triggerToast("Save failed - check connection", "warn");
+      console.error("Save estimation error:", err);
+      triggerToast("Save failed — check connection", "warn");
+      return false;
     }
   };
 

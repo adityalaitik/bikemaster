@@ -591,6 +591,47 @@ export class AppService {
     await this.jobCardRepo.update(entity.id, { rating });
   }
 
+  // ── Estimation Context (single load endpoint) ─────────────────────────────
+  async getEstimationContext(jobCardNo: string) {
+    const [jobCard, complaints, packages, offers, employees, spareCatalog, serviceCatalog] = await Promise.all([
+      this.getJobCardById(jobCardNo),
+      this.getComplaints(jobCardNo),
+      this.getPackages(),
+      this.getOffers(),
+      this.getEmployees(),
+      this.getSpareParts(''),
+      this.getServicesMaster(''),
+    ]);
+    return { jobCard, complaints, packages, offers, employees, spareCatalog, serviceCatalog };
+  }
+
+  // ── Save Estimation (single save endpoint) ────────────────────────────────
+  async saveEstimation(jobCardNo: string, body: {
+    spares: any[];
+    services: any[];
+    complaints: ComplaintDto[];
+    isEstimated: boolean;
+    completion: number;
+    overallDiscount: number;
+  }) {
+    const [spares, services] = await Promise.all([
+      this.saveSpareItems(jobCardNo, body.spares),
+      this.saveServiceItems(jobCardNo, body.services),
+      this.saveComplaints(jobCardNo, body.complaints),
+    ]);
+
+    const entity = await this.jobCardRepo.findOneBy({ jobCardNo });
+    if (entity) {
+      await this.jobCardRepo.update(entity.id, {
+        isEstimated: body.isEstimated,
+        completion: body.completion,
+        overallDiscount: body.overallDiscount,
+      });
+    }
+
+    return this.getJobCardById(jobCardNo);
+  }
+
   private parseJSON<T>(value: string | null | undefined, fallback: T): T {
     try { return value ? JSON.parse(value) : fallback; } catch { return fallback; }
   }
