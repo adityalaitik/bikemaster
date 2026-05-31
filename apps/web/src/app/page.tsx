@@ -1300,7 +1300,7 @@ export default function Home() {
         return;
       }
       updates = { isStatusFilled: true, completion: 30 };
-    } else if (action === "JC/ Est") {
+    } else if (action === "JC/Est" || action === "JC/ Est") {
       router.push(`/estimation/${job.id}`);
       return; // Handled by navigation
     } else if (action === "Payments") {

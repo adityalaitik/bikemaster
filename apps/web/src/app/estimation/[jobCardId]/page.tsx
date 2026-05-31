@@ -289,9 +289,14 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
     const loadData = async () => {
       try {
         const authHeaders = getAuthHeaders();
-        const [jobRes, , pkgRes, offerRes, empRes] = await Promise.all([
+        // Run catalog fetch independently so its errors don't abort job load
+        fetch(`${API_BASE_URL}/spare-parts/search?q=`, { headers: authHeaders })
+          .then(r => r.ok ? r.json() : []).then(setSparesCatalog).catch(() => {});
+        fetch(`${API_BASE_URL}/services/search?q=`, { headers: authHeaders })
+          .then(r => r.ok ? r.json() : []).then(setServicesCatalog).catch(() => {});
+
+        const [jobRes, pkgRes, offerRes, empRes] = await Promise.all([
           fetch(`${API_BASE_URL}/job-cards/${jobCardId}`, { headers: authHeaders }),
-          fetchCatalog(""),
           fetch(`${API_BASE_URL}/packages`, { headers: authHeaders }),
           fetch(`${API_BASE_URL}/offers`, { headers: authHeaders }),
           fetch(`${API_BASE_URL}/employees`, { headers: authHeaders }),
