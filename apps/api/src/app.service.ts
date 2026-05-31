@@ -583,9 +583,7 @@ export class AppService {
       due,
       serviceType: entity.serviceType,
       date: entity.dateOfArrival ? new Date(entity.dateOfArrival).toDateString() : new Date().toDateString(),
-      complaints: dbComplaints.length > 0
-        ? dbComplaints.map(c => ({ text: c.complaintText, finding: c.workshopFinding || '', action: this.dbActionToFrontend(c.action) }))
-        : this.parseJSON(entity.customerComplaints, []),
+      complaints: dbComplaints.map(c => ({ text: c.complaintText, finding: c.workshopFinding || '', action: this.dbActionToFrontend(c.action) })),
       spares: dbSpares.map(s => ({
         id: s.id, name: s.partName, qty: s.quantity,
         price: Number(s.price), mrp: Number(s.mrp),
