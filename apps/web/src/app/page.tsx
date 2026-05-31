@@ -4963,6 +4963,47 @@ export default function Home() {
                         </div>
                       </div>
 
+                      {/* Action buttons after bill total */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          onClick={() => router.push(`/estimation/${selectedJob.id}`)}
+                          className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl border border-green-500/20 bg-green-500/5 text-green-600 hover:text-green-700 dark:text-green-400 hover:bg-green-500/10 font-bold text-xs transition-all"
+                        >
+                          <Wrench className="h-4 w-4" />
+                          <span>Estimate</span>
+                        </button>
+                        <button
+                          onClick={() => triggerToast(`Gate Pass issued for ${selectedJob.vehicleNo}!`, "success")}
+                          className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 hover:text-slate-800 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs transition-colors"
+                        >
+                          <FileText className="h-4 w-4" />
+                          <span>Gate Pass</span>
+                        </button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "Completed" }) });
+                              if (res.ok) { const u = await res.json(); setJobs(prev => prev.map(j => j.id === u.id ? u : j)); setSelectedJob(u); triggerToast("Job completed!", "success"); }
+                            } catch { setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, status: "Completed", completion: 100 } : j)); triggerToast("Marked complete", "success"); }
+                          }}
+                          className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-xs transition-colors shadow-md"
+                        >
+                          Done
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm("Delete this job card?")) return;
+                            try { await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "DELETE" }); } catch { }
+                            setJobs(prev => prev.filter(j => j.id !== selectedJob.id));
+                            setSelectedJob(null); setIsSidePanelOpen(false);
+                            triggerToast("Job Card deleted!", "warn");
+                          }}
+                          className="p-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 dark:text-red-400 transition-colors border border-transparent hover:border-red-200"
+                        >
+                          <Trash2 className="h-4.5 w-4.5" />
+                        </button>
+                      </div>
+
 		              </div>
 		            )}
 
@@ -5076,78 +5117,6 @@ export default function Home() {
                   )}
 
                 </div>
-
-                {/* Footer panel controls */}
-                <div className="p-4 border-t border-slate-200 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900/30 flex items-center justify-between gap-2.5">
-                  <button
-                    onClick={() => {
-                      router.push(`/estimation/${selectedJob.id}`);
-                    }}
-                    className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl border border-green-500/20 bg-green-500/5 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-500/10 font-bold text-xs transition-all"
-                  >
-                    <Wrench className="h-4 w-4" />
-                    <span>Estimate</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      triggerToast(`Gate Pass issued for ${selectedJob.vehicleNo}!`, "success");
-                    }}
-                    className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs transition-colors"
-                  >
-                    <FileText className="h-4 w-4" />
-                    <span>Gate Pass</span>
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}/status`, {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ status: "Completed" })
-                        });
-                        if (res.ok) {
-                          const updated = await res.json();
-                          setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
-                          setSelectedJob(updated);
-                          triggerToast(`Job Card ${selectedJob.id} completed successfully!`, "success");
-                        }
-                      } catch (err) {
-                        console.error("Backend offline, updating locally", err);
-                        setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, status: "Completed", completion: 100 } : j));
-                        setSelectedJob((prev: JobCard | null) => prev ? { ...prev, status: "Completed", completion: 100 } : null);
-                        triggerToast(`Job Card ${selectedJob.id} completed (Local Fallback)!`, "success");
-                      }
-                    }}
-                    className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-xs transition-colors shadow-md shadow-green-600/10"
-                  >
-                    Done
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, {
-                          method: "DELETE"
-                        });
-                        if (res.ok) {
-                          setJobs(prev => prev.filter(j => j.id !== selectedJob.id));
-                          setSelectedJob(null);
-                          setIsSidePanelOpen(false);
-                          triggerToast(`Job Card deleted from database!`, "warn");
-                        }
-                      } catch (err) {
-                        console.error("Backend offline, deleting locally", err);
-                        setJobs(prev => prev.filter(j => j.id !== selectedJob.id));
-                        setSelectedJob(null);
-                        setIsSidePanelOpen(false);
-                        triggerToast(`Job Card deleted (Local Fallback)!`, "warn");
-                      }
-                    }}
-                    className="p-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 dark:text-red-400 transition-colors border border-transparent hover:border-red-200 dark:hover:border-red-900/40"
-                  >
-                    <Trash2 className="h-4.5 w-4.5" />
-                  </button>
-                </div>
-
 	              </div>
 		              </>
 		            )}
