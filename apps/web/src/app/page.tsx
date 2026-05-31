@@ -4541,6 +4541,7 @@ export default function Home() {
 
                         {/* Middle Segment */}
                         {(() => {
+                          const isExpanded = expandedCardId === job.id;
                           const currentRating = jobRatings[job.id] ?? (job as any).rating ?? 0;
                           const actions = [
                             { icon: FileText, label: "JC/Est" },
@@ -4549,7 +4550,7 @@ export default function Home() {
                             { icon: DollarSign, label: "Payments" },
                             { icon: Percent, label: "Discount" },
                             { icon: Printer, label: "Invoice" },
-                            { icon: MoreHorizontal, label: "View More", isMore: true },
+                            { icon: isExpanded ? ChevronUp : MoreHorizontal, label: isExpanded ? "View Less" : "View More", isMore: true },
                           ];
                           const infoFields = (
                             <>
@@ -4605,8 +4606,12 @@ export default function Home() {
                                 e.stopPropagation();
                                 e.preventDefault();
                                 if (action.label === "View More") {
+                                  setExpandedCardId(job.id);
                                   setSelectedJob(job);
                                   setIsSidePanelOpen(true);
+                                } else if (action.label === "View Less") {
+                                  setExpandedCardId(null);
+                                  setIsSidePanelOpen(false);
                                 } else {
                                   handleJobAction(job, action.label);
                                 }
@@ -4621,25 +4626,41 @@ export default function Home() {
                               <span className="text-[9px] font-black uppercase tracking-tighter text-slate-500 dark:text-slate-400">{action.label}</span>
                             </button>
                           ));
+                          const progressCircle = (
+                            <div className="relative flex items-center justify-center shrink-0 ml-2">
+                              <svg className="w-12 h-12 transform -rotate-90">
+                                <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
+                                <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
+                                  strokeDasharray={125.7}
+                                  strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
+                                  strokeLinecap="round"
+                                />
+                              </svg>
+                              <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
+                            </div>
+                          );
                           return (
                             <div className="bg-white dark:bg-slate-900 px-6 py-3">
-                              {/* Single row: info + divider + action buttons + progress */}
-                              <div className="flex items-center gap-x-6 overflow-x-auto">
-                                {infoFields}
-                                <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 shrink-0 mx-1" />
-                                {actionButtons}
-                                <div className="relative flex items-center justify-center shrink-0 ml-2">
-                                  <svg className="w-12 h-12 transform -rotate-90">
-                                    <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
-                                    <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
-                                      strokeDasharray={125.7}
-                                      strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
-                                      strokeLinecap="round"
-                                    />
-                                  </svg>
-                                  <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
+                              {isExpanded ? (
+                                /* Expanded: two rows */
+                                <div className="flex flex-col gap-3">
+                                  <div className="flex items-center gap-x-8 flex-wrap gap-y-2">
+                                    {infoFields}
+                                  </div>
+                                  <div className="flex items-center gap-x-5 flex-wrap gap-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+                                    {actionButtons}
+                                    {progressCircle}
+                                  </div>
                                 </div>
-                              </div>
+                              ) : (
+                                /* Collapsed: single row — info + divider + action buttons + progress */
+                                <div className="flex items-center gap-x-6 overflow-x-auto">
+                                  {infoFields}
+                                  <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 shrink-0 mx-1" />
+                                  {actionButtons}
+                                  {progressCircle}
+                                </div>
+                              )}
                             </div>
                           );
                         })()}
@@ -4701,7 +4722,7 @@ export default function Home() {
 	              <button
 	                type="button"
 	                aria-label="Close job details"
-	                onClick={() => setIsSidePanelOpen(false)}
+	                onClick={() => { setIsSidePanelOpen(false); setExpandedCardId(null); }}
 	                className="fixed inset-0 z-30 bg-slate-950/30 md:hidden"
 	              />
 	              <div className="fixed md:relative inset-y-0 right-0 z-40 w-full max-w-[480px] md:w-[480px] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 flex flex-col overflow-hidden h-full shadow-2xl transition-transform duration-300">
@@ -4768,6 +4789,7 @@ export default function Home() {
                       onClick={() => {
                         setIsSidePanelOpen(false);
                         setIsEditingSidePanel(false);
+                        setExpandedCardId(null);
                       }}
                       className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700/80 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
                     >
@@ -4966,7 +4988,7 @@ export default function Home() {
                             if (!confirm("Delete this job card?")) return;
                             try { await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "DELETE" }); } catch { }
                             setJobs(prev => prev.filter(j => j.id !== selectedJob.id));
-                            setSelectedJob(null); setIsSidePanelOpen(false);
+                            setSelectedJob(null); setIsSidePanelOpen(false); setExpandedCardId(null);
                             triggerToast("Job Card deleted!", "warn");
                           }}
                           className="p-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 dark:text-red-400 transition-colors border border-transparent hover:border-red-200"
