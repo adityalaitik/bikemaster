@@ -4,6 +4,7 @@ import { AuthService } from './auth/auth.service';
 import { Public } from './auth/public.decorator';
 import { Roles } from './auth/roles.decorator';
 
+@Public()
 @Controller()
 export class AppController {
   constructor(

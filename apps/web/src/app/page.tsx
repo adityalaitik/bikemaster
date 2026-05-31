@@ -1522,7 +1522,9 @@ export default function Home() {
         setIsSuccessOverlayOpen(true);
         triggerToast(`Customer registered successfully!`, "success");
       } else {
-        triggerToast("Failed to save customer in database", "warn");
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Backend registration failed:", errorData);
+        triggerToast(`Failed to save customer in database: ${errorData.message || "Unknown error"}`, "warn");
       }
     } catch (err) {
       console.error(err);

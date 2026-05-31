@@ -444,6 +444,7 @@ export class AppService {
 
   // Create atomic Job Card
   createJobCard(data: Partial<JobCard>): JobCard {
+    console.log('Creating Job Card:', data);
     const newId = `JC-BBR-2026-00${this.jobs.length + 127}`;
     const newJob: JobCard = {
       id: newId,
