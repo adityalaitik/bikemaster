@@ -4536,35 +4536,38 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Middle Segment (Details & Actions) */}
-                        <div className="bg-white dark:bg-slate-900 px-6 py-4 flex flex-col xl:flex-row items-center justify-between gap-8">
-                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-10 gap-y-6 w-full xl:w-auto">
-                            <div className="flex flex-col">
+                        {/* Middle Segment — Row 1: Info fields, Row 2: Actions */}
+                        <div className="bg-white dark:bg-slate-900 px-6 py-4 flex flex-col gap-4">
+
+                          {/* Row 1 — Customer & Advisor fields */}
+                          <div className="flex flex-wrap items-start gap-x-10 gap-y-3">
+                            <div className="flex flex-col min-w-[90px]">
                               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Customer Name</span>
                               <span className="text-xs font-black text-slate-800 dark:text-white uppercase leading-none">{job.customerName}</span>
                             </div>
-                            <div className="flex flex-col">
+                            <div className="flex flex-col min-w-[100px]">
                               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Phone Number</span>
                               <span className="text-xs font-black text-slate-800 dark:text-white leading-none font-mono">{job.phone}</span>
                             </div>
-                            <div className="flex flex-col">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Customer Source</span>
+                            <div className="flex flex-col min-w-[80px]">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Source</span>
                               <span className="text-xs font-black text-slate-800 dark:text-white leading-none">Walk-in</span>
                             </div>
-                            <div className="flex flex-col">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Customer Rating</span>
+                            <div className="flex flex-col min-w-[80px]">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Rating</span>
                               <div className="flex items-center space-x-0.5">
                                 {[1,2,3,4,5].map(i => <Star key={i} className={`h-3 w-3 ${i <= 4 ? 'text-yellow-400 fill-yellow-400' : 'text-slate-200'}`} />)}
                               </div>
                             </div>
-                            <div className="flex flex-col">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Advisor Name</span>
+                            <div className="flex flex-col min-w-[90px]">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Advisor</span>
                               <span className="text-xs font-black text-slate-800 dark:text-white leading-none">{job.advisor}</span>
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-between xl:justify-end w-full xl:w-auto space-x-4 md:space-x-8">
-                            <div className="flex items-center space-x-3 md:space-x-6 overflow-x-auto pb-1 no-scrollbar">
+                          {/* Row 2 — Action buttons + Progress circle */}
+                          <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3">
+                            <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
                               {[
                                 { icon: FileText, label: "JC/ Est", isBold: job.isEstimated },
                                 { icon: ThumbsUp, label: "Status", isFilled: job.isStatusFilled },
@@ -4574,39 +4577,42 @@ export default function Home() {
                                 { icon: Printer, label: "Invoice" },
                                 { icon: MoreHorizontal, label: "View More", isMore: true }
                               ].map((action, i) => (
-                                <div 
-                                  key={i} 
-                                  className="flex flex-col items-center space-y-1.5 cursor-pointer group/btn"
+                                <button
+                                  key={i}
+                                  type="button"
+                                  className="flex flex-col items-center space-y-1.5 cursor-pointer group/btn focus:outline-none"
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    e.preventDefault();
                                     handleJobAction(job, action.label);
                                   }}
                                 >
-                                  <div className={`p-2.5 md:p-3 rounded-full shadow-sm transition-all group-hover/btn:scale-110 ${
-                                    action.isMore ? 'bg-teal-500 text-white' : 
-                                    action.isFilled ? 'bg-green-500 text-white border-green-400' :
+                                  <div className={`p-2.5 rounded-full shadow-sm transition-all group-hover/btn:scale-110 ${
+                                    action.isMore ? 'bg-teal-500 text-white' :
+                                    action.isFilled ? 'bg-green-500 text-white' :
+                                    action.isBold ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 border border-teal-200 dark:border-teal-700' :
                                     'bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white border border-slate-100 dark:border-slate-700'
                                   }`}>
-                                    <action.icon className={`h-4 w-4 md:h-5 md:w-5 ${action.isBold ? 'stroke-[3px]' : ''}`} />
+                                    <action.icon className={`h-4 w-4 ${action.isBold ? 'stroke-[2.5px]' : ''}`} />
                                   </div>
-                                  <span className={`text-[9px] md:text-[10px] font-black uppercase tracking-tighter ${
-                                    action.isBold || action.isFilled ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white'
+                                  <span className={`text-[9px] font-black uppercase tracking-tighter ${
+                                    action.isBold || action.isFilled ? 'text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white'
                                   }`}>{action.label}</span>
-                                </div>
+                                </button>
                               ))}
                             </div>
 
                             {/* Circular Progress Indicator */}
-                            <div className="relative flex items-center justify-center shrink-0">
-                              <svg className="w-14 h-14 md:w-16 md:h-16 transform -rotate-90">
-                                <circle cx="32" cy="32" r="28" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="6" fill="transparent" />
-                                <circle cx="32" cy="32" r="28" stroke="currentColor" className="text-teal-500" strokeWidth="6" fill="transparent"
-                                  strokeDasharray={175.9}
-                                  strokeDashoffset={175.9 - (175.9 * job.completion) / 100}
+                            <div className="relative flex items-center justify-center shrink-0 ml-4">
+                              <svg className="w-14 h-14 transform -rotate-90">
+                                <circle cx="28" cy="28" r="24" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="5" fill="transparent" />
+                                <circle cx="28" cy="28" r="24" stroke="currentColor" className="text-teal-500" strokeWidth="5" fill="transparent"
+                                  strokeDasharray={150.8}
+                                  strokeDashoffset={150.8 - (150.8 * job.completion) / 100}
                                   strokeLinecap="round"
                                 />
                               </svg>
-                              <span className="absolute text-xs md:text-sm font-black text-slate-800 dark:text-white">{job.completion}%</span>
+                              <span className="absolute text-xs font-black text-slate-800 dark:text-white">{job.completion}%</span>
                             </div>
                           </div>
                         </div>
