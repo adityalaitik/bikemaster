@@ -355,13 +355,15 @@ export class AppService {
     // Batch-fetch everything in 6 parallel queries instead of N×6
     const vehicleIds = [...new Set(cards.map(c => c.vehicleId).filter(Boolean))];
     const customerIds = [...new Set(cards.map(c => c.customerId).filter(Boolean))];
+    const advisorIds = [...new Set(cards.map(c => c.serviceAdvisorId).filter(Boolean))];
     const jobCardNos = cards.map(c => c.jobCardNo);
 
-    const [vehicles, customers, allSpares, allServices] = await Promise.all([
+    const [vehicles, customers, allSpares, allServices, advisors] = await Promise.all([
       vehicleIds.length ? this.vehicleRepo.findBy({ id: In(vehicleIds) }) : [],
       customerIds.length ? this.customerRepo.findBy({ id: In(customerIds) }) : [],
       this.jobSparesRepo.findBy({ jobCardId: In(jobCardNos) }),
       this.jobServicesRepo.findBy({ jobCardId: In(jobCardNos) }),
+      advisorIds.length ? this.employeeRepo.findBy({ id: In(advisorIds) }) : [],
     ]);
 
     const modelIds = [...new Set((vehicles as Vehicle[]).map(v => v.modelId).filter(Boolean))];
@@ -376,6 +378,7 @@ export class AppService {
     const customerMap = new Map((customers as Customer[]).map(c => [c.id, c]));
     const modelMap = new Map((models as VehicleModelEntity[]).map(m => [m.id, m]));
     const brandMap = new Map((brands as VehicleBrandEntity[]).map(b => [b.id, b]));
+    const advisorMap = new Map((advisors as EmployeeEntity[]).map(a => [a.id, a.name]));
     const sparesMap = new Map<string, JobSpareItemEntity[]>();
     const servicesMap = new Map<string, JobServiceItemEntity[]>();
     for (const s of allSpares as JobSpareItemEntity[]) {
@@ -395,7 +398,8 @@ export class AppService {
       const brandModel = brand && model ? `${brand.name} ${model.name}`.trim() : 'Bike';
       const dbSpares = sparesMap.get(e.jobCardNo) || [];
       const dbServices = servicesMap.get(e.jobCardNo) || [];
-      return this.buildJobCardDto(e, vehicle ?? null, customer ?? null, brandModel, dbSpares, dbServices);
+      const advisorName = e.serviceAdvisorId ? (advisorMap.get(e.serviceAdvisorId) || 'Assigned') : 'Assigned';
+      return this.buildJobCardDto(e, vehicle ?? null, customer ?? null, brandModel, dbSpares, dbServices, [], advisorName);
     });
   }
 
@@ -404,12 +408,13 @@ export class AppService {
     const entity = await this.jobCardRepo.findOneBy({ jobCardNo: id });
     if (!entity) throw new NotFoundException(`Job card ${id} not found`);
 
-    const [vehicle, customer, dbSpares, dbServices, dbComplaints] = await Promise.all([
+    const [vehicle, customer, dbSpares, dbServices, dbComplaints, advisorEmployee] = await Promise.all([
       this.vehicleRepo.findOneBy({ id: entity.vehicleId }),
       this.customerRepo.findOneBy({ id: entity.customerId }),
       this.jobSparesRepo.findBy({ jobCardId: entity.jobCardNo }),
       this.jobServicesRepo.findBy({ jobCardId: entity.jobCardNo }),
       this.complaintRepo.findBy({ jobCardId: entity.id }),
+      entity.serviceAdvisorId ? this.employeeRepo.findOneBy({ id: entity.serviceAdvisorId }) : Promise.resolve(null),
     ]);
 
     let brandModel = 'Bike';
@@ -420,7 +425,8 @@ export class AppService {
         brandModel = `${brand?.name || ''} ${model.name}`.trim();
       }
     }
-    return this.buildJobCardDto(entity, vehicle, customer, brandModel, dbSpares, dbServices, dbComplaints);
+    const advisorName = (advisorEmployee as EmployeeEntity | null)?.name || 'Assigned';
+    return this.buildJobCardDto(entity, vehicle, customer, brandModel, dbSpares, dbServices, dbComplaints, advisorName);
   }
 
   // ── Create Job Card ───────────────────────────────────────────────────────
@@ -546,6 +552,7 @@ export class AppService {
     dbSpares: JobSpareItemEntity[],
     dbServices: JobServiceItemEntity[],
     dbComplaints: JobComplaintEntity[] = [],
+    advisorName = 'Assigned',
   ): JobCard {
     const spareTotal = dbSpares.reduce((sum, s) => sum + Number(s.price) * s.quantity, 0);
     const serviceTotal = dbServices.reduce((sum, s) => sum + Number(s.rate), 0);
@@ -578,7 +585,7 @@ export class AppService {
       kms: entity.odometerIn,
       completion: entity.completion ?? (entity.status === 'completed' ? 100 : 10),
       status: STATUS_TO_UI[entity.status] || entity.status,
-      advisor: 'Assigned',
+      advisor: advisorName,
       technician: 'Assigned',
       urgency: 'Medium',
       estimate,
