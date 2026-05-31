@@ -244,6 +244,10 @@ CREATE TABLE job_cards (
     rating TINYINT CHECK (rating BETWEEN 1 AND 5),
     rating_feedback TEXT,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    is_estimated BOOLEAN NOT NULL DEFAULT FALSE,
+    is_status_filled BOOLEAN NOT NULL DEFAULT FALSE,
+    overall_discount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    completion INTEGER NOT NULL DEFAULT 10,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -481,43 +485,36 @@ CREATE TABLE sold_packages (
 
 CREATE TABLE job_spare_items (
     id CHAR(36) NOT NULL DEFAULT (UUID()),
-    job_card_id CHAR(36) NOT NULL,
-    spare_part_id CHAR(36) NOT NULL,
-    batch_id CHAR(36),
-    quantity DECIMAL(10,3) NOT NULL DEFAULT 1.000,
-    unit_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    job_card_id VARCHAR(50) NOT NULL,
+    spare_part_id CHAR(36),
+    part_name VARCHAR(255) NOT NULL,
+    part_number VARCHAR(100) NOT NULL,
+    price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     mrp DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    discount_pct DECIMAL(5,2) NOT NULL DEFAULT 0.00,
-    tax_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    net_total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    billed_to ENUM('customer', 'insurance') NOT NULL DEFAULT 'customer',
-    status ENUM('estimated', 'issued', 'returned', 'rejected') NOT NULL DEFAULT 'estimated',
+    quantity INTEGER NOT NULL DEFAULT 1,
+    billed_to VARCHAR(50) NOT NULL DEFAULT 'customer',
+    status VARCHAR(50) NOT NULL DEFAULT 'estimated',
     from_package_id CHAR(36),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    CONSTRAINT fk_jsi_jc FOREIGN KEY (job_card_id) REFERENCES job_cards(id) ON DELETE CASCADE,
-    CONSTRAINT fk_jsi_part FOREIGN KEY (spare_part_id) REFERENCES spare_parts(id),
-    CONSTRAINT fk_jsi_batch FOREIGN KEY (batch_id) REFERENCES inventory_batches(id),
-    CONSTRAINT fk_jsi_pkg FOREIGN KEY (from_package_id) REFERENCES sold_packages(id)
+    CONSTRAINT fk_jsi_part FOREIGN KEY (spare_part_id) REFERENCES spare_parts(id) ON DELETE SET NULL,
+    CONSTRAINT fk_jsi_pkg FOREIGN KEY (from_package_id) REFERENCES sold_packages(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE job_service_items (
     id CHAR(36) NOT NULL DEFAULT (UUID()),
-    job_card_id CHAR(36) NOT NULL,
-    service_id CHAR(36) NOT NULL,
-    quantity DECIMAL(10,3) NOT NULL DEFAULT 1.000,
+    job_card_id VARCHAR(50) NOT NULL,
+    service_id CHAR(36),
+    service_name VARCHAR(255) NOT NULL,
+    service_code VARCHAR(50) NOT NULL,
     rate DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    discount_pct DECIMAL(5,2) NOT NULL DEFAULT 0.00,
-    tax_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    net_total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    billed_to ENUM('customer', 'insurance') NOT NULL DEFAULT 'customer',
-    status ENUM('estimated', 'completed', 'rejected') NOT NULL DEFAULT 'estimated',
+    billed_to VARCHAR(50) NOT NULL DEFAULT 'customer',
+    status VARCHAR(50) NOT NULL DEFAULT 'estimated',
     from_package_id CHAR(36),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    CONSTRAINT fk_jsvi_jc FOREIGN KEY (job_card_id) REFERENCES job_cards(id) ON DELETE CASCADE,
-    CONSTRAINT fk_jsvi_svc FOREIGN KEY (service_id) REFERENCES services(id),
-    CONSTRAINT fk_jsvi_pkg FOREIGN KEY (from_package_id) REFERENCES sold_packages(id)
+    CONSTRAINT fk_jsvi_svc FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE SET NULL,
+    CONSTRAINT fk_jsvi_pkg FOREIGN KEY (from_package_id) REFERENCES sold_packages(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================

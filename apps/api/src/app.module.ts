@@ -11,6 +11,10 @@ import { Vehicle } from './entities/vehicle.entity';
 import { JobCardEntity } from './entities/job-card.entity';
 import { VehicleBrandEntity } from './entities/vehicle-brand.entity';
 import { VehicleModelEntity } from './entities/vehicle-model.entity';
+import { SparePartEntity } from './entities/spare-part.entity';
+import { ServiceEntity } from './entities/service.entity';
+import { JobSpareItemEntity } from './entities/job-spare-item.entity';
+import { JobServiceItemEntity } from './entities/job-service-item.entity';
 
 @Module({
   imports: [
@@ -22,10 +26,10 @@ import { VehicleModelEntity } from './entities/vehicle-model.entity';
       username: 'admin',
       password: 'LeOmm@8769',
       database: 'bikemaster',
-      entities: [Customer, Vehicle, JobCardEntity, VehicleBrandEntity, VehicleModelEntity],
+      entities: [Customer, Vehicle, JobCardEntity, VehicleBrandEntity, VehicleModelEntity, SparePartEntity, ServiceEntity, JobSpareItemEntity, JobServiceItemEntity],
       synchronize: false, // Set to true only in dev if you want TypeORM to sync schema
     }),
-    TypeOrmModule.forFeature([Customer, Vehicle, JobCardEntity, VehicleBrandEntity, VehicleModelEntity]),
+    TypeOrmModule.forFeature([Customer, Vehicle, JobCardEntity, VehicleBrandEntity, VehicleModelEntity, SparePartEntity, ServiceEntity, JobSpareItemEntity, JobServiceItemEntity]),
   ],
   controllers: [AppController],
   providers: [

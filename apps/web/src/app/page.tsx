@@ -99,6 +99,10 @@ interface JobCard {
   spares: SpareItem[];
   services: ServiceItem[];
   timeline: TimelineItem[];
+  isEstimated?: boolean;
+  isStatusFilled?: boolean;
+  overallDiscount?: number;
+  advancePaid?: number;
 }
 
 interface InventoryBatch {
@@ -1282,6 +1286,117 @@ export default function Home() {
     };
     fetchEmployees();
   }, []);
+  // Progress and Action Handlers
+  const handleJobAction = async (job: JobCard, action: string) => {
+    let updates: Partial<JobCard> = {};
+    const currentProgress = job.completion;
+
+    if (action === "Status") {
+      if (!job.isEstimated) {
+        triggerToast("Please complete estimation first!", "warn");
+        return;
+      }
+      updates = { isStatusFilled: true, completion: 30 };
+    } else if (action === "JC/ Est") {
+      router.push(`/estimation/${job.id}`);
+      return; // Handled by navigation
+    } else if (action === "Payments") {
+      setSelectedJob(job);
+      setIsPaymentModalOpen(true);
+      return;
+    } else if (action === "Discount") {
+      if (!job.isEstimated) {
+        triggerToast("Discount can only be applied after estimation!", "warn");
+        return;
+      }
+      setSelectedJob(job);
+      setIsDiscountModalOpen(true);
+      return;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/job-cards/${job.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updates)
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
+          triggerToast(`Job card updated: ${action}`, "success");
+        }
+      } catch (err) {
+        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, ...updates } : j));
+        triggerToast(`${action} updated (Local Fallback)`, "success");
+      }
+    }
+  };
+
+  // State for new feature modals
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({
+    card: 0, cash: 0, cheque: 0, other: 0, remarks: ""
+  });
+  const [discountForm, setDiscountForm] = useState({
+    overallType: "amount", overallValue: 0, lineItems: []
+  });
+
+  const handleSavePayment = async () => {
+    if (!selectedJob) return;
+    const totalPaid = Number(paymentForm.card) + Number(paymentForm.cash) + Number(paymentForm.cheque) + Number(paymentForm.other);
+    const updates = {
+      paid: selectedJob.paid + totalPaid,
+      due: Math.max(0, selectedJob.estimate - (selectedJob.paid + totalPaid)),
+      completion: 50
+    };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
+        setIsPaymentModalOpen(false);
+        triggerToast("Payment recorded successfully!", "success");
+      }
+    } catch (err) {
+      setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, ...updates } : j));
+      setIsPaymentModalOpen(false);
+      triggerToast("Payment recorded (Local Fallback)", "success");
+    }
+  };
+
+  const handleSaveDiscount = async () => {
+    if (!selectedJob) return;
+    const updates = {
+      overallDiscount: discountForm.overallValue,
+      due: Math.max(0, selectedJob.estimate - selectedJob.paid - discountForm.overallValue)
+    };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
+        setIsDiscountModalOpen(false);
+        triggerToast("Discount applied successfully!", "success");
+      }
+    } catch (err) {
+      setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, ...updates } : j));
+      setIsDiscountModalOpen(false);
+      triggerToast("Discount applied (Local Fallback)", "success");
+    }
+  };
+
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -4451,8 +4566,8 @@ export default function Home() {
                           <div className="flex items-center justify-between xl:justify-end w-full xl:w-auto space-x-4 md:space-x-8">
                             <div className="flex items-center space-x-3 md:space-x-6 overflow-x-auto pb-1 no-scrollbar">
                               {[
-                                { icon: FileText, label: "JC/ Est" },
-                                { icon: ThumbsUp, label: "Status" },
+                                { icon: FileText, label: "JC/ Est", isBold: job.isEstimated },
+                                { icon: ThumbsUp, label: "Status", isFilled: job.isStatusFilled },
                                 { icon: RefreshCw, label: "History" },
                                 { icon: DollarSign, label: "Payments" },
                                 { icon: Percent, label: "Discount" },
@@ -4464,23 +4579,19 @@ export default function Home() {
                                   className="flex flex-col items-center space-y-1.5 cursor-pointer group/btn"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (action.label === "JC/ Est") {
-                                      router.push(`/estimation/${job.id}`);
-                                    } else if (action.label === "Invoice") {
-                                      triggerToast("Generating invoice preview...", "success");
-                                    } else if (action.label === "View More") {
-                                      setSelectedJob(job);
-                                      setIsEditingSidePanel(false);
-                                      setIsSidePanelOpen(true);
-                                    } else {
-                                      triggerToast(`Opening ${action.label} panel`, "info");
-                                    }
+                                    handleJobAction(job, action.label);
                                   }}
                                 >
-                                  <div className={`p-2.5 md:p-3 rounded-full shadow-sm transition-all group-hover/btn:scale-110 ${action.isMore ? 'bg-teal-500 text-white' : 'bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white border border-slate-100 dark:border-slate-700'}`}>
-                                    <action.icon className="h-4 w-4 md:h-5 md:w-5" />
+                                  <div className={`p-2.5 md:p-3 rounded-full shadow-sm transition-all group-hover/btn:scale-110 ${
+                                    action.isMore ? 'bg-teal-500 text-white' : 
+                                    action.isFilled ? 'bg-green-500 text-white border-green-400' :
+                                    'bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white border border-slate-100 dark:border-slate-700'
+                                  }`}>
+                                    <action.icon className={`h-4 w-4 md:h-5 md:w-5 ${action.isBold ? 'stroke-[3px]' : ''}`} />
                                   </div>
-                                  <span className="text-[9px] md:text-[10px] font-black text-slate-500 dark:text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white uppercase tracking-tighter">{action.label}</span>
+                                  <span className={`text-[9px] md:text-[10px] font-black uppercase tracking-tighter ${
+                                    action.isBold || action.isFilled ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white'
+                                  }`}>{action.label}</span>
                                 </div>
                               ))}
                             </div>
@@ -4519,7 +4630,7 @@ export default function Home() {
                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Inv No (Cust)</span>
                             </div>
                             <div className="flex flex-col items-center">
-                              <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">0.00</span>
+                              <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">{job.overallDiscount?.toFixed(2) || "0.00"}</span>
                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Discount</span>
                             </div>
                             <div className="flex flex-col items-center">
@@ -4531,7 +4642,7 @@ export default function Home() {
                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Paid (Cust)</span>
                             </div>
                             <div className="flex flex-col items-center">
-                              <span className="text-[11px] font-black text-red-500 dark:text-red-400 animate-pulse">₹{job.due.toLocaleString()}</span>
+                              <span className={`text-[11px] font-black ${job.due > 0 ? "text-red-500 animate-pulse" : "text-teal-600"} dark:text-teal-400`}>₹{job.due.toLocaleString()}</span>
                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Due (Cust)</span>
                             </div>
                           </div>
@@ -9012,6 +9123,217 @@ export default function Home() {
             </div>
           );
         })()}
+
+        {/* ============================================================ */}
+        {/* PAYMENT DETAILS MODAL */}
+        {/* ============================================================ */}
+        {isPaymentModalOpen && selectedJob && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex-1 text-center">
+                  <h3 className="font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Edit Payment Details</h3>
+                  <div className="text-[10px] font-bold text-slate-500 flex items-center justify-center space-x-3 mt-1">
+                    <span>Order Id: {selectedJob.id.split('-').pop()}</span>
+                    <span>|</span>
+                    <span>Total Amount: Rs. {selectedJob.estimate}</span>
+                    <span>|</span>
+                    <span>Total Discount: Rs. {selectedJob.overallDiscount || 0}</span>
+                    <span>|</span>
+                    <span>Total Paid: Rs. {selectedJob.paid}</span>
+                    <span>|</span>
+                    <span>Total Due: Rs. {selectedJob.due}</span>
+                  </div>
+                </div>
+                <button onClick={() => setIsPaymentModalOpen(false)} className="text-red-500 hover:scale-110 transition-transform"><X className="h-5 w-5" /></button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between p-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-lg">
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-300">To Be Paid By Customer :</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-white">Rs. {selectedJob.due}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg">
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-300">Total Paid By Customer :</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-white">Rs. {selectedJob.paid}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-lg">
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-300">Total Due From Customer :</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-white">Rs. {selectedJob.due}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  {['Card', 'Cash', 'Cheque', 'Other'].map((mode) => (
+                    <React.Fragment key={mode}>
+                      <div className="flex items-center bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-xl px-4 py-2">
+                        <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">Paid By {mode}</span>
+                      </div>
+                      <input 
+                        type="number" 
+                        placeholder="Enter amount" 
+                        className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold focus:outline-none focus:ring-1 focus:ring-teal-500"
+                        onChange={(e) => setPaymentForm({ ...paymentForm, [mode.toLowerCase()]: e.target.value })}
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="Enter remarks" 
+                        className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold focus:outline-none focus:ring-1 focus:ring-teal-500"
+                        onChange={(e) => setPaymentForm({ ...paymentForm, remarks: e.target.value })}
+                      />
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center">
+                <button className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase">Terms and Conditions</button>
+                <div className="flex space-x-3">
+                  <button 
+                    onClick={handleSavePayment}
+                    className="px-8 py-2 bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 rounded-xl font-black text-xs hover:bg-green-200 transition-all"
+                  >
+                    Edit
+                  </button>
+                  <button 
+                    onClick={() => setIsPaymentModalOpen(false)}
+                    className="px-8 py-2 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-xl font-black text-xs hover:bg-red-200 transition-all"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* DISCOUNT AMOUNT MODAL */}
+        {/* ============================================================ */}
+        {isDiscountModalOpen && selectedJob && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-4xl overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex-1 text-center">
+                  <h3 className="font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Add Discount Amount</h3>
+                  <div className="text-[10px] font-bold text-slate-500 flex items-center justify-center space-x-3 mt-1">
+                    <span className="text-green-600">Billed Amount: {selectedJob.estimate}</span>
+                    <span className="text-red-500">| Overall Discount (Calculated after taxes)</span>
+                    <span>| Previous Entered Overall Discount: 0.00</span>
+                  </div>
+                </div>
+                <button onClick={() => setIsDiscountModalOpen(false)} className="text-red-500 hover:scale-110 transition-transform"><X className="h-5 w-5" /></button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-5 gap-4 items-end">
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase">Customer Id</label>
+                    <input type="text" readOnly value={selectedJob.id.split('-').pop()} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold outline-none" />
+                  </div>
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase">Type</label>
+                    <select className="px-3 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none">
+                      <option>Select Type</option>
+                      <option>Percentage</option>
+                      <option>Amount</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase">Value</label>
+                    <input 
+                      type="number" 
+                      placeholder="0.00" 
+                      className="px-3 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none" 
+                      onChange={(e) => setDiscountForm({ ...discountForm, overallValue: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase">Discount.</label>
+                    <input type="number" readOnly value={discountForm.overallValue} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold outline-none" />
+                  </div>
+                  <button 
+                    onClick={handleSaveDiscount}
+                    className="px-3 py-2 bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 rounded-xl font-black text-xs hover:bg-green-200 transition-all h-[38px]"
+                  >
+                    Save
+                  </button>
+                </div>
+
+                <div className="text-center">
+                  <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Line Item Discount (Calculated before taxes)</span>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-teal-500 text-white font-black uppercase tracking-wider text-[10px]">
+                        <th className="py-3 px-4">Parts Name</th>
+                        <th className="py-3 px-4">Total Amount</th>
+                        <th className="py-3 px-4">Taxable Amount</th>
+                        <th className="py-3 px-4">Type</th>
+                        <th className="py-3 px-4">Value</th>
+                        <th className="py-3 px-4">Discount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-bold">
+                      <tr className="bg-slate-50 dark:bg-slate-800/30">
+                        <td colSpan={6} className="py-2 px-4 text-red-500 text-[10px] uppercase font-black">Parts & Consumables</td>
+                      </tr>
+                      {selectedJob.spares.map((spare, i) => (
+                        <tr key={i}>
+                          <td className="py-3 px-4">{spare.name}</td>
+                          <td className="py-3 px-4">{spare.price * spare.qty}</td>
+                          <td className="py-3 px-4">{(spare.price * spare.qty / 1.18).toFixed(2)}</td>
+                          <td className="py-3 px-4">
+                            <select className="px-2 py-1 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-[10px] outline-none">
+                              <option>Select Type</option>
+                            </select>
+                          </td>
+                          <td className="py-3 px-4"><input type="number" placeholder="0.00" className="w-16 px-2 py-1 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-[10px] outline-none" /></td>
+                          <td className="py-3 px-4">0</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-slate-50 dark:bg-slate-800/30">
+                        <td colSpan={6} className="py-2 px-4 text-red-500 text-[10px] uppercase font-black">Services</td>
+                      </tr>
+                      {selectedJob.services.map((svc, i) => (
+                        <tr key={i}>
+                          <td className="py-3 px-4">{svc.name}</td>
+                          <td className="py-3 px-4">{svc.rate}</td>
+                          <td className="py-3 px-4">{(svc.rate / 1.18).toFixed(2)}</td>
+                          <td className="py-3 px-4">
+                            <select className="px-2 py-1 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-[10px] outline-none">
+                              <option>Select Type</option>
+                            </select>
+                          </td>
+                          <td className="py-3 px-4"><input type="number" placeholder="0.00" className="w-16 px-2 py-1 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-[10px] outline-none" /></td>
+                          <td className="py-3 px-4">0</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-center space-x-3">
+                <button 
+                  onClick={handleSaveDiscount}
+                  className="px-20 py-2 bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 rounded-xl font-black text-xs hover:bg-green-200 transition-all"
+                >
+                  Save
+                </button>
+                <button 
+                  onClick={() => setIsDiscountModalOpen(false)}
+                  className="px-20 py-2 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-xl font-black text-xs hover:bg-red-200 transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ============================================================ */}
         {/* TOAST SYSTEM (Bottom Right Floating) */}

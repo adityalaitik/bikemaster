@@ -6,6 +6,10 @@ import { Vehicle } from './entities/vehicle.entity';
 import { JobCardEntity } from './entities/job-card.entity';
 import { VehicleBrandEntity } from './entities/vehicle-brand.entity';
 import { VehicleModelEntity } from './entities/vehicle-model.entity';
+import { SparePartEntity } from './entities/spare-part.entity';
+import { ServiceEntity } from './entities/service.entity';
+import { JobSpareItemEntity } from './entities/job-spare-item.entity';
+import { JobServiceItemEntity } from './entities/job-service-item.entity';
 
 export interface Complaint {
   text: string;
@@ -14,19 +18,25 @@ export interface Complaint {
 }
 
 export interface SpareItem {
-  id: string;
+  id?: string;
   name: string;
   qty: number;
   price: number;
+  mrp: number;
+  hsn: string;
+  code: string;
+  status: string;
+  billedTo: 'customer' | 'insurance';
 }
 
 export interface ServiceItem {
-  id: string;
+  id?: string;
   name: string;
   rate: number;
   hsn: string;
   code: string;
   status: string;
+  billedTo: 'customer' | 'insurance';
 }
 
 export interface TimelineEntry {
@@ -56,6 +66,9 @@ export interface JobCard {
   spares: SpareItem[];
   services: ServiceItem[];
   timeline: TimelineEntry[];
+  isEstimated?: boolean;
+  isStatusFilled?: boolean;
+  overallDiscount?: number;
 }
 
 export interface VehicleBrand { id: string; name: string; }
@@ -77,6 +90,14 @@ export class AppService {
     private brandRepo: Repository<VehicleBrandEntity>,
     @InjectRepository(VehicleModelEntity)
     private modelRepo: Repository<VehicleModelEntity>,
+    @InjectRepository(SparePartEntity)
+    private sparesRepo: Repository<SparePartEntity>,
+    @InjectRepository(ServiceEntity)
+    private servicesRepo: Repository<ServiceEntity>,
+    @InjectRepository(JobSpareItemEntity)
+    private jobSparesRepo: Repository<JobSpareItemEntity>,
+    @InjectRepository(JobServiceItemEntity)
+    private jobServicesRepo: Repository<JobServiceItemEntity>,
   ) {}
 
   // Keep these in-memory for now as they are static lookup data
@@ -106,22 +127,15 @@ export class AppService {
     { id: 'e5', name: 'Anil Dash', role: 'advisor' }
   ];
 
-  private spareParts: SparePartMaster[] = [
-    { id: 'p1', name: 'Front Brake Shoe Assembly', partNumber: 'BP-HON-098', price: 350, mrp: 380, stockQty: 45, hsnCode: 'HSN-8708' },
-    { id: 'p2', name: 'Engine Oil Premium 10W30 (800ml)', partNumber: 'SP-OIL-12', price: 450, mrp: 480, stockQty: 120, hsnCode: 'HSN-2710' },
-    { id: 'p3', name: 'Spark Plug Champion Premium', partNumber: 'SPK-PLG-01', price: 120, mrp: 140, stockQty: 85, hsnCode: 'HSN-8511' }
-  ];
-
-  private servicesMaster: ServiceMaster[] = [
-    { id: 's1', name: 'General Service Standard Labor', code: 'SRV-GEN-01', rate: 650, sacCode: 'SAC-9987' },
-    { id: 's2', name: 'Express Washing & Polishing Bundle', code: 'SRV-WSH-02', rate: 400, sacCode: 'SAC-9987' }
-  ];
-
   // Helper to map DB entity to UI JobCard type
   private async mapToJobCard(entity: JobCardEntity): Promise<JobCard> {
     const vehicle = await this.vehicleRepo.findOneBy({ id: entity.vehicleId });
     const customer = await this.customerRepo.findOneBy({ id: entity.customerId });
     const advisor = await this.employees.find(e => e.id === entity.serviceAdvisorId);
+
+    // Fetch allocated items from DB
+    const dbSpares = await this.jobSparesRepo.find({ where: { jobCardId: entity.jobCardNo } });
+    const dbServices = await this.jobServicesRepo.find({ where: { jobCardId: entity.jobCardNo } });
 
     let brandModel = 'Bike';
     if (vehicle) {
@@ -147,7 +161,7 @@ export class AppService {
       customerName: customer?.name || 'Anonymous',
       phone: customer?.phone || 'N/A',
       kms: entity.odometerIn,
-      completion: entity.status === 'completed' ? 100 : 10,
+      completion: entity.completion || (entity.status === 'completed' ? 100 : 10),
       status: statusMap[entity.status] || entity.status,
       advisor: advisor?.name || 'Assigned',
       technician: 'Technician',
@@ -158,9 +172,30 @@ export class AppService {
       serviceType: entity.serviceType,
       date: entity.dateOfArrival.toDateString(),
       complaints: JSON.parse(entity.customerComplaints || '[]'),
-      spares: [],
-      services: [],
-      timeline: []
+      spares: dbSpares.map(s => ({
+        id: s.id,
+        name: s.partName,
+        qty: s.quantity,
+        price: Number(s.price),
+        mrp: Number(s.mrp),
+        hsn: s.partNumber, 
+        code: s.partNumber,
+        status: s.status,
+        billedTo: s.billedTo as any
+      })),
+      services: dbServices.map(s => ({
+        id: s.id,
+        name: s.serviceName,
+        rate: Number(s.rate),
+        hsn: s.serviceCode,
+        code: s.serviceCode,
+        status: s.status,
+        billedTo: s.billedTo as any
+      })),
+      timeline: [],
+      isEstimated: entity.isEstimated,
+      isStatusFilled: entity.isStatusFilled,
+      overallDiscount: Number(entity.overallDiscount)
     };
   }
 
@@ -174,8 +209,67 @@ export class AppService {
   getEmployees(role?: string): Employee[] {
     return role ? this.employees.filter(e => e.role === role) : this.employees;
   }
-  getSpareParts(): SparePartMaster[] { return this.spareParts; }
-  getServicesMaster(): ServiceMaster[] { return this.servicesMaster; }
+
+  async getSpareParts(query?: string): Promise<SparePartMaster[]> {
+    const qb = this.sparesRepo.createQueryBuilder('sp');
+    if (query) {
+      qb.where('sp.partName LIKE :q OR sp.partNumber LIKE :q', { q: `%${query}%` });
+    }
+    const entities = await qb.getMany();
+    return entities.map(e => ({
+      id: e.id,
+      name: e.partName,
+      partNumber: e.partNumber,
+      price: 450, 
+      mrp: 480,
+      stockQty: 100,
+      hsnCode: e.hsnCode || 'N/A'
+    }));
+  }
+
+  async getServicesMaster(query?: string): Promise<ServiceMaster[]> {
+    const qb = this.servicesRepo.createQueryBuilder('sv');
+    if (query) {
+      qb.where('sv.serviceName LIKE :q OR sv.serviceCode LIKE :q', { q: `%${query}%` });
+    }
+    const entities = await qb.getMany();
+    return entities.map(e => ({
+      id: e.id,
+      name: e.serviceName,
+      code: e.serviceCode,
+      rate: Number(e.defaultRate),
+      sacCode: e.hsnSacCode || 'N/A'
+    }));
+  }
+
+  async saveSpareItems(jobCardId: string, items: any[]) {
+    await this.jobSparesRepo.delete({ jobCardId });
+    const entities = items.map(item => this.jobSparesRepo.create({
+      jobCardId,
+      partName: item.name,
+      partNumber: item.code,
+      price: item.price,
+      mrp: item.mrp || item.price,
+      quantity: item.qty,
+      billedTo: item.billedTo || 'customer',
+      status: item.status || 'estimated'
+    }));
+    return this.jobSparesRepo.save(entities);
+  }
+
+  async saveServiceItems(jobCardId: string, items: any[]) {
+    await this.jobServicesRepo.delete({ jobCardId });
+    const entities = items.map(item => this.jobServicesRepo.create({
+      jobCardId,
+      serviceName: item.name,
+      serviceCode: item.code,
+      rate: item.rate,
+      billedTo: item.billedTo || 'customer',
+      status: item.status || 'estimated'
+    }));
+    return this.jobServicesRepo.save(entities);
+  }
+
   getCustomerSources(): string[] { return ['Walk-in', 'Referral', 'Social Media']; }
 
   async getJobCards(status?: string, search?: string): Promise<JobCard[]> {
@@ -204,7 +298,7 @@ export class AppService {
         try {
           return await this.mapToJobCard(e);
         } catch (err) {
-          console.error(`Error mapping job card ${e.jobCardNo}:`, err);
+          console.error(`[ERROR] Mapping job card ${e.jobCardNo}:`, err);
           return null;
         }
       }),
@@ -269,6 +363,14 @@ export class AppService {
 
     // 4. Create Job Card
     const jobCount = await this.jobCardRepo.count();
+    const serviceTypeMap: Record<string, string> = {
+      'Regular': 'regular',
+      'Express': 'express',
+      'Accidental': 'accidental',
+      'Insurance Claim': 'insurance_claim',
+      'Free Service': 'free_service'
+    };
+    
     const jobCard = this.jobCardRepo.create({
       jobCardNo: `JC-BBR-2026-00${jobCount + 127}`,
       garageId: '11111111-1111-1111-1111-111111111111',
@@ -276,11 +378,70 @@ export class AppService {
       customerId: customer.id,
       odometerIn: data.kms || 0,
       status: 'under_servicing',
-      serviceType: 'regular',
+      serviceType: serviceTypeMap[data.serviceType] || 'regular',
       customerComplaints: JSON.stringify(data.complaints || []),
+      completion: 10,
+      isEstimated: false,
+      isStatusFilled: false,
+      overallDiscount: 0
     });
 
     const saved = await this.jobCardRepo.save(jobCard);
+    return this.mapToJobCard(saved);
+  }
+
+  async updateJobCard(id: string, data: Partial<JobCard>): Promise<JobCard> {
+    console.log(`Updating Job Card ${id}:`, data);
+    const entity = await this.jobCardRepo.findOneBy({ jobCardNo: id });
+    if (!entity) throw new NotFoundException(`Job card ${id} not found`);
+
+    // 1. Update Customer details if provided
+    if (data.customerName || data.phone) {
+      const customer = await this.customerRepo.findOneBy({ id: entity.customerId });
+      if (customer) {
+        if (data.customerName) customer.name = data.customerName;
+        if (data.phone) customer.phone = data.phone;
+        await this.customerRepo.save(customer);
+      }
+    }
+
+    // 2. Update Vehicle details if provided
+    if (data.vehicleNo) {
+      const vehicle = await this.vehicleRepo.findOneBy({ id: entity.vehicleId });
+      if (vehicle) {
+        vehicle.registrationNo = data.vehicleNo.toUpperCase();
+        await this.vehicleRepo.save(vehicle);
+      }
+    }
+
+    // 3. Update Job Card details
+    if (data.kms !== undefined) entity.odometerIn = data.kms;
+    if (data.isEstimated !== undefined) entity.isEstimated = data.isEstimated;
+    if (data.isStatusFilled !== undefined) entity.isStatusFilled = data.isStatusFilled;
+    if (data.overallDiscount !== undefined) entity.overallDiscount = data.overallDiscount;
+    if (data.completion !== undefined) entity.completion = data.completion;
+    
+    if (data.status) {
+      const revStatusMap: Record<string, string> = {
+        'Under Servicing': 'under_servicing',
+        'Ready for Delivery': 'ready_for_delivery',
+        'Payment Processing': 'payment_processing',
+        'Completed': 'completed',
+        'Draft': 'draft'
+      };
+      entity.status = revStatusMap[data.status] || data.status;
+    }
+    
+    if (data.advisor) {
+      const advisor = this.employees.find(e => e.name === data.advisor);
+      if (advisor) entity.serviceAdvisorId = advisor.id;
+    }
+
+    if (data.complaints) {
+      entity.customerComplaints = JSON.stringify(data.complaints);
+    }
+
+    const saved = await this.jobCardRepo.save(entity);
     return this.mapToJobCard(saved);
   }
 
@@ -297,7 +458,7 @@ export class AppService {
       total,
       pending: total - ready,
       ready,
-      revenue: 12500 // Mock for now
+      revenue: 12500 
     };
   }
 }

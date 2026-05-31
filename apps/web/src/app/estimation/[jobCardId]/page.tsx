@@ -95,6 +95,9 @@ interface JobCard {
   spares: SpareItem[];
   services: ServiceItem[];
   timeline: TimelineItem[];
+  isEstimated?: boolean;
+  isStatusFilled?: boolean;
+  overallDiscount?: number;
 }
 
 interface SparePartMaster {
@@ -512,6 +515,17 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: allocatedServices })
+      });
+
+      // Update basic job card status flags
+      await fetch(`${API_BASE_URL}/job-cards/${job.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          isEstimated: true, 
+          completion: 20,
+          estimate: netTotal 
+        })
       });
 
       if (sparesRes.ok && servicesRes.ok) {

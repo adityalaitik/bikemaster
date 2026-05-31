@@ -41,6 +41,18 @@ export class JobCardEntity {
   })
   serviceType: string;
 
+  @Column({ name: 'is_estimated', default: false })
+  isEstimated: boolean;
+
+  @Column({ name: 'is_status_filled', default: false })
+  isStatusFilled: boolean;
+
+  @Column({ name: 'overall_discount', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  overallDiscount: number;
+
+  @Column({ name: 'completion', default: 10 })
+  completion: number;
+
   @CreateDateColumn({ name: 'date_of_arrival' })
   dateOfArrival: Date;
 

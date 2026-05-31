@@ -38,13 +38,23 @@ export class AppController {
   }
 
   @Get('spare-parts')
-  getSpareParts(): SparePartMaster[] {
-    return this.appService.getSpareParts();
+  async getSpareParts(@Query('q') q?: string): Promise<SparePartMaster[]> {
+    return this.appService.getSpareParts(q);
+  }
+
+  @Get('spare-parts/search')
+  async searchSpareParts(@Query('q') q?: string): Promise<SparePartMaster[]> {
+    return this.appService.getSpareParts(q);
   }
 
   @Get('services-master')
-  getServicesMaster(): ServiceMaster[] {
-    return this.appService.getServicesMaster();
+  async getServicesMaster(@Query('q') q?: string): Promise<ServiceMaster[]> {
+    return this.appService.getServicesMaster(q);
+  }
+
+  @Get('services/search')
+  async searchServices(@Query('q') q?: string): Promise<ServiceMaster[]> {
+    return this.appService.getServicesMaster(q);
   }
 
   @Get('customer-sources')
@@ -77,6 +87,24 @@ export class AppController {
   @Post('job-cards')
   async createJobCard(@Body() data: Partial<JobCard>): Promise<JobCard> {
     return this.appService.createJobCard(data);
+  }
+
+  @Patch('job-cards/:id')
+  async updateJobCard(
+    @Param('id') id: string,
+    @Body() data: Partial<JobCard>,
+  ): Promise<JobCard> {
+    return this.appService.updateJobCard(id, data);
+  }
+
+  @Post('job-cards/:id/spare-items')
+  async saveSpareItems(@Param('id') id: string, @Body() body: { items: any[] }) {
+    return this.appService.saveSpareItems(id, body.items);
+  }
+
+  @Post('job-cards/:id/service-items')
+  async saveServiceItems(@Param('id') id: string, @Body() body: { items: any[] }) {
+    return this.appService.saveServiceItems(id, body.items);
   }
 
   // ============================================================
