@@ -3697,13 +3697,13 @@ export default function Home() {
           <div className="absolute bottom-0 right-0 w-64 h-64 rounded-full bg-teal-400/20 blur-3xl pointer-events-none" />
 
           {/* Logo */}
-          <div className="relative z-10 flex items-center space-x-3">
-            <div className="bg-white/20 backdrop-blur-sm p-3 rounded-2xl border border-white/20">
-              <Wrench className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-white font-black text-lg tracking-tight leading-none">BIKE MASTERS</h1>
-              <p className="text-green-200 text-[9px] font-bold tracking-[0.18em] mt-0.5 uppercase">Workshop Management System</p>
+          <div className="relative z-10 flex items-center">
+            <div className="bg-white p-2 rounded-2xl shadow-xl">
+              <img 
+                src="/assets/bike_master_logo.jpg" 
+                alt="Bike Masters Logo" 
+                className="h-16 w-auto object-contain"
+              />
             </div>
           </div>
 
@@ -3759,12 +3759,12 @@ export default function Home() {
         <div className={`flex-1 flex flex-col items-center justify-center p-8 lg:p-16 relative ${theme === "dark" ? "bg-slate-950" : "bg-white"}`}>
 
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center space-x-2.5 mb-10">
-            <div className="bg-green-600 p-2.5 rounded-xl"><Wrench className="h-5 w-5 text-white" /></div>
-            <div>
-              <p className={`font-black text-lg leading-none ${theme === "dark" ? "text-white" : "text-slate-900"}`}>BIKE MASTERS</p>
-              <p className="text-green-600 text-[9px] font-bold tracking-widest uppercase mt-0.5">WMS</p>
-            </div>
+          <div className="lg:hidden flex items-center justify-center mb-10">
+            <img 
+              src="/assets/bike_master_logo.jpg" 
+              alt="Bike Masters Logo" 
+              className="h-16 w-auto object-contain"
+            />
           </div>
 
 	          <div className="w-full max-w-[360px] space-y-7">
@@ -3915,12 +3915,16 @@ export default function Home() {
               >
                 <Menu className="h-4 w-4" />
               </button>
-              <div className="bg-green-600 dark:bg-green-500 p-2.5 rounded-xl text-white shadow-md shadow-green-600/10 flex items-center justify-center transform hover:rotate-12 transition-transform duration-300">
-                <Wrench className="h-5 w-5" />
+              <div 
+                className="flex items-center cursor-pointer active:scale-95 transition-transform"
+                onClick={() => setActiveTab("Dashboard")}
+              >
+                <img 
+                  src="/assets/bike_master_logo.jpg" 
+                  alt="Bike Masters Logo" 
+                  className="h-10 w-auto object-contain transform hover:scale-105 transition-transform duration-300"
+                />
               </div>
-              <span className="hidden sm:inline font-extrabold text-xl tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
-                BIKE MASTERS
-              </span>
               <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-700/50 text-xs font-semibold px-2.5 py-1 rounded-full text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
                 <MapPin className="h-3 w-3 mr-1.5 text-green-500" />
                 Bhubaneswar Branch
@@ -4018,12 +4022,13 @@ export default function Home() {
           )}
 
           <aside className={`fixed md:relative inset-y-0 left-0 z-50 md:z-auto border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 transition-all duration-300 flex flex-col justify-between shadow-2xl md:shadow-none ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"} ${sidebarCollapsed ? "w-72 md:w-16" : "w-72 md:w-64"}`}>
-            <div className="md:hidden h-16 px-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-700">
-              <div className="flex items-center space-x-2">
-                <div className="bg-green-600 p-2 rounded-xl text-white">
-                  <Wrench className="h-4 w-4" />
-                </div>
-                <span className="font-black text-sm tracking-tight">BIKE MASTERS</span>
+            <div className="md:hidden h-20 px-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-700">
+              <div className="flex items-center">
+                <img 
+                  src="/assets/bike_master_logo.jpg" 
+                  alt="Bike Masters Logo" 
+                  className="h-10 w-auto object-contain"
+                />
               </div>
               <button
                 type="button"
