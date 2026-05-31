@@ -20,6 +20,7 @@ import {
   User,
   LogOut,
   ChevronDown,
+  ChevronUp,
   Phone,
   Clock,
   CheckCircle,
@@ -379,6 +380,8 @@ export default function Home() {
   const [activeFilter, setActiveFilter] = useState("All Jobs");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedJob, setSelectedJob] = useState<JobCard | null>(null);
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [jobRatings, setJobRatings] = useState<Record<string, number>>({});
 
   // Authentication states
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -4388,7 +4391,7 @@ export default function Home() {
             ) : activeTab === "Service Queue" ? (
               <>
                 {/* Left Content Area (Grid of Job Cards) */}
-	            <div className="flex-1 flex flex-col overflow-y-auto px-4 md:px-6 py-5 md:py-6 space-y-5 md:space-y-6">
+	            <div className="flex-1 flex flex-col overflow-y-auto px-4 md:px-6 py-4 md:py-5 space-y-4 md:space-y-5">
               
               {/* Header Page Title */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -4536,132 +4539,179 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Middle Segment — Row 1: Info fields, Row 2: Actions */}
-                        <div className="bg-white dark:bg-slate-900 px-6 py-4 flex flex-col gap-4">
-
-                          {/* Row 1 — Customer & Advisor fields */}
-                          <div className="flex flex-wrap items-start gap-x-10 gap-y-3">
-                            <div className="flex flex-col min-w-[90px]">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Customer Name</span>
-                              <span className="text-xs font-black text-slate-800 dark:text-white uppercase leading-none">{job.customerName}</span>
-                            </div>
-                            <div className="flex flex-col min-w-[100px]">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Phone Number</span>
-                              <span className="text-xs font-black text-slate-800 dark:text-white leading-none font-mono">{job.phone}</span>
-                            </div>
-                            <div className="flex flex-col min-w-[80px]">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Source</span>
-                              <span className="text-xs font-black text-slate-800 dark:text-white leading-none">Walk-in</span>
-                            </div>
-                            <div className="flex flex-col min-w-[80px]">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Rating</span>
-                              <div className="flex items-center space-x-0.5">
-                                {[1,2,3,4,5].map(i => <Star key={i} className={`h-3 w-3 ${i <= 4 ? 'text-yellow-400 fill-yellow-400' : 'text-slate-200'}`} />)}
+                        {/* Middle Segment */}
+                        {(() => {
+                          const isExpanded = expandedCardId === job.id;
+                          const currentRating = jobRatings[job.id] ?? (job as any).rating ?? 0;
+                          const actions = [
+                            { icon: FileText, label: "JC/Est" },
+                            { icon: ThumbsUp, label: "Status" },
+                            { icon: RefreshCw, label: "History" },
+                            { icon: DollarSign, label: "Payments" },
+                            { icon: Percent, label: "Discount" },
+                            { icon: Printer, label: "Invoice" },
+                            { icon: isExpanded ? ChevronUp : MoreHorizontal, label: isExpanded ? "View Less" : "View More", isMore: true },
+                          ];
+                          const infoFields = (
+                            <>
+                              <div className="flex flex-col shrink-0">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Customer Name</span>
+                                <span className="text-xs font-black text-slate-800 dark:text-white uppercase leading-none">{job.customerName}</span>
                               </div>
-                            </div>
-                            <div className="flex flex-col min-w-[90px]">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Advisor</span>
-                              <span className="text-xs font-black text-slate-800 dark:text-white leading-none">{job.advisor}</span>
-                            </div>
-                          </div>
-
-                          {/* Row 2 — Action buttons + Progress circle */}
-                          <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3">
-                            <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
-                              {[
-                                { icon: FileText, label: "JC/ Est", isBold: job.isEstimated },
-                                { icon: ThumbsUp, label: "Status", isFilled: job.isStatusFilled },
-                                { icon: RefreshCw, label: "History" },
-                                { icon: DollarSign, label: "Payments" },
-                                { icon: Percent, label: "Discount" },
-                                { icon: Printer, label: "Invoice" },
-                                { icon: MoreHorizontal, label: "View More", isMore: true }
-                              ].map((action, i) => (
-                                <button
-                                  key={i}
-                                  type="button"
-                                  className="flex flex-col items-center space-y-1.5 cursor-pointer group/btn focus:outline-none"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    handleJobAction(job, action.label);
-                                  }}
-                                >
-                                  <div className={`p-2.5 rounded-full shadow-sm transition-all group-hover/btn:scale-110 ${
-                                    action.isMore ? 'bg-teal-500 text-white' :
-                                    action.isFilled ? 'bg-green-500 text-white' :
-                                    action.isBold ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 border border-teal-200 dark:border-teal-700' :
-                                    'bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white border border-slate-100 dark:border-slate-700'
-                                  }`}>
-                                    <action.icon className={`h-4 w-4 ${action.isBold ? 'stroke-[2.5px]' : ''}`} />
+                              <div className="flex flex-col shrink-0">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Phone Number</span>
+                                <span className="text-xs font-black text-slate-800 dark:text-white leading-none font-mono">{job.phone}</span>
+                              </div>
+                              <div className="flex flex-col shrink-0">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Source</span>
+                                <span className="text-xs font-black text-slate-800 dark:text-white leading-none">Walk-in</span>
+                              </div>
+                              <div className="flex flex-col shrink-0">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Rating</span>
+                                <div className="flex items-center space-x-0.5">
+                                  {[1,2,3,4,5].map(star => (
+                                    <button
+                                      key={star}
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        e.preventDefault();
+                                        setJobRatings(prev => ({ ...prev, [job.id]: star }));
+                                        fetch(`${API_BASE_URL}/job-cards/${job.id}/rating`, {
+                                          method: 'PATCH',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ rating: star }),
+                                        }).catch(() => {});
+                                        triggerToast(`Rating updated to ${star} star${star > 1 ? 's' : ''}`, "success");
+                                      }}
+                                      className="focus:outline-none hover:scale-125 transition-transform"
+                                    >
+                                      <Star className={`h-3 w-3 ${star <= currentRating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-300 dark:text-slate-600'}`} />
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="flex flex-col shrink-0">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Advisor</span>
+                                <span className="text-xs font-black text-slate-800 dark:text-white leading-none">{job.advisor}</span>
+                              </div>
+                            </>
+                          );
+                          const actionButtons = actions.map((action, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              className="flex flex-col items-center space-y-1 cursor-pointer group/btn focus:outline-none shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                if (action.label === "View More") {
+                                  setExpandedCardId(job.id);
+                                  setSelectedJob(job);
+                                  setIsSidePanelOpen(true);
+                                } else if (action.label === "View Less") {
+                                  setExpandedCardId(null);
+                                } else {
+                                  handleJobAction(job, action.label);
+                                }
+                              }}
+                            >
+                              <div className={`p-2 rounded-full shadow-sm transition-all group-hover/btn:scale-110 ${
+                                action.isMore ? 'bg-teal-500 text-white' :
+                                'bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white border border-slate-100 dark:border-slate-700'
+                              }`}>
+                                <action.icon className="h-3.5 w-3.5" />
+                              </div>
+                              <span className="text-[9px] font-black uppercase tracking-tighter text-slate-500 dark:text-slate-400">{action.label}</span>
+                            </button>
+                          ));
+                          return (
+                            <div className="bg-white dark:bg-slate-900 px-6 py-3">
+                              {isExpanded ? (
+                                /* Expanded: two rows */
+                                <div className="flex flex-col gap-3">
+                                  <div className="flex items-center gap-x-8 flex-wrap gap-y-2">
+                                    {infoFields}
                                   </div>
-                                  <span className={`text-[9px] font-black uppercase tracking-tighter ${
-                                    action.isBold || action.isFilled ? 'text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white'
-                                  }`}>{action.label}</span>
-                                </button>
-                              ))}
+                                  <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3">
+                                    <div className="flex items-center gap-x-5 flex-wrap gap-y-2">
+                                      {actionButtons}
+                                    </div>
+                                    <div className="relative flex items-center justify-center shrink-0 ml-4">
+                                      <svg className="w-12 h-12 transform -rotate-90">
+                                        <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
+                                        <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
+                                          strokeDasharray={125.7}
+                                          strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
+                                          strokeLinecap="round"
+                                        />
+                                      </svg>
+                                      <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                /* Collapsed: single row — info + divider + action buttons + progress */
+                                <div className="flex items-center gap-x-6 overflow-x-auto">
+                                  {infoFields}
+                                  <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 shrink-0 mx-1" />
+                                  {actionButtons}
+                                  <div className="relative flex items-center justify-center shrink-0 ml-2">
+                                    <svg className="w-12 h-12 transform -rotate-90">
+                                      <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
+                                      <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
+                                        strokeDasharray={125.7}
+                                        strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
+                                        strokeLinecap="round"
+                                      />
+                                    </svg>
+                                    <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
+                                  </div>
+                                </div>
+                              )}
                             </div>
-
-                            {/* Circular Progress Indicator */}
-                            <div className="relative flex items-center justify-center shrink-0 ml-4">
-                              <svg className="w-14 h-14 transform -rotate-90">
-                                <circle cx="28" cy="28" r="24" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="5" fill="transparent" />
-                                <circle cx="28" cy="28" r="24" stroke="currentColor" className="text-teal-500" strokeWidth="5" fill="transparent"
-                                  strokeDasharray={150.8}
-                                  strokeDashoffset={150.8 - (150.8 * job.completion) / 100}
-                                  strokeLinecap="round"
-                                />
-                              </svg>
-                              <span className="absolute text-xs font-black text-slate-800 dark:text-white">{job.completion}%</span>
-                            </div>
-                          </div>
-                        </div>
+                          );
+                        })()}
 
                         {/* Bottom Segment (Billing & Dates) */}
-                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-b-[2.2rem] px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
-                          <div className="flex items-center space-x-6 w-full md:w-auto">
-                            <div className="flex items-center bg-teal-500 text-white rounded-xl overflow-hidden shadow-sm">
-                              <div className="px-3 py-1.5 text-[10px] font-black border-r border-white/20 uppercase tracking-wider">JC.No:</div>
-                              <div className="px-3 py-1.5 text-xs font-black font-mono">{job.id.split('-').pop()}</div>
-                            </div>
-                            <div className="flex flex-col items-center">
-                              <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">₹{job.estimate.toLocaleString()}</span>
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Estimate</span>
-                            </div>
+                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-b-[2.2rem] px-6 py-3 flex flex-row flex-wrap items-center gap-x-6 gap-y-2">
+                          <div className="flex items-center bg-teal-500 text-white rounded-xl overflow-hidden shadow-sm shrink-0">
+                            <div className="px-3 py-1.5 text-[10px] font-black border-r border-white/20 uppercase tracking-wider">JC.No:</div>
+                            <div className="px-3 py-1.5 text-xs font-black font-mono">{job.id.split('-').pop()}</div>
                           </div>
-
-                          <div className="flex-1 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 border-t md:border-t-0 md:border-l md:border-r border-slate-200 dark:border-slate-700 py-2 md:py-0 md:px-12 w-full">
-                            <div className="flex flex-col items-center">
-                              <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">NA</span>
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Inv No (Cust)</span>
-                            </div>
-                            <div className="flex flex-col items-center">
-                              <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">{job.overallDiscount?.toFixed(2) || "0.00"}</span>
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Discount</span>
-                            </div>
-                            <div className="flex flex-col items-center">
-                              <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">0</span>
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Coupon</span>
-                            </div>
-                            <div className="flex flex-col items-center">
-                              <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">₹{job.paid.toLocaleString()}</span>
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Paid (Cust)</span>
-                            </div>
-                            <div className="flex flex-col items-center">
-                              <span className={`text-[11px] font-black ${job.due > 0 ? "text-red-500 animate-pulse" : "text-teal-600"} dark:text-teal-400`}>₹{job.due.toLocaleString()}</span>
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Due (Cust)</span>
-                            </div>
+                          <div className="flex flex-col items-center shrink-0">
+                            <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">₹{job.estimate.toLocaleString()}</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Estimate</span>
                           </div>
-
-                          <div className="flex items-center space-x-3 w-full md:w-auto justify-end">
-                            <div className="bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-[10px] font-black shadow-sm">
-                              <span className="text-slate-400 uppercase mr-1">DOA:</span>
-                              <span className="text-teal-600 dark:text-teal-400 font-mono uppercase">{job.date}</span>
-                            </div>
-                            <div className="bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-[10px] font-black shadow-sm">
-                              <span className="text-slate-400 uppercase mr-1">DOD:</span>
-                              <span className="text-teal-600 dark:text-teal-400 font-mono uppercase">NA</span>
-                            </div>
+                          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 shrink-0" />
+                          <div className="flex flex-col items-center shrink-0">
+                            <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">NA</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Inv No</span>
+                          </div>
+                          <div className="flex flex-col items-center shrink-0">
+                            <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">{(job as any).overallDiscount?.toFixed(2) || "0.00"}</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Discount</span>
+                          </div>
+                          <div className="flex flex-col items-center shrink-0">
+                            <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">0</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Coupon</span>
+                          </div>
+                          <div className="flex flex-col items-center shrink-0">
+                            <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">₹{job.paid.toLocaleString()}</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Paid</span>
+                          </div>
+                          <div className="flex flex-col items-center shrink-0">
+                            <span className={`text-[11px] font-black ${job.due > 0 ? "text-red-500 animate-pulse" : "text-teal-600"} dark:text-teal-400`}>₹{job.due.toLocaleString()}</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Due</span>
+                          </div>
+                          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 shrink-0" />
+                          <div className="bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-[10px] font-black shadow-sm shrink-0">
+                            <span className="text-slate-400 uppercase mr-1">DOA:</span>
+                            <span className="text-teal-600 dark:text-teal-400 font-mono uppercase">{job.date}</span>
+                          </div>
+                          <div className="bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-[10px] font-black shadow-sm shrink-0">
+                            <span className="text-slate-400 uppercase mr-1">DOD:</span>
+                            <span className="text-teal-600 dark:text-teal-400 font-mono uppercase">NA</span>
                           </div>
                         </div>
                       </div>

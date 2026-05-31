@@ -30,7 +30,7 @@ export interface JobCard {
   kms: number; completion: number; status: string; advisor: string; technician: string;
   urgency: string; estimate: number; paid: number; due: number; serviceType: string;
   date: string; complaints: Complaint[]; spares: SpareItem[]; services: ServiceItem[];
-  timeline: TimelineEntry[]; isEstimated?: boolean; isStatusFilled?: boolean; overallDiscount?: number;
+  timeline: TimelineEntry[]; isEstimated?: boolean; isStatusFilled?: boolean; overallDiscount?: number; rating?: number;
 }
 
 export interface VehicleBrand { id: string; name: string; }
@@ -581,7 +581,14 @@ export class AppService {
       isEstimated: entity.isEstimated,
       isStatusFilled: entity.isStatusFilled,
       overallDiscount: discount,
+      rating: entity.rating ?? null,
     };
+  }
+
+  async updateRating(jobCardNo: string, rating: number): Promise<void> {
+    const entity = await this.jobCardRepo.findOneBy({ jobCardNo });
+    if (!entity) throw new Error(`Job card ${jobCardNo} not found`);
+    await this.jobCardRepo.update(entity.id, { rating });
   }
 
   private parseJSON<T>(value: string | null | undefined, fallback: T): T {

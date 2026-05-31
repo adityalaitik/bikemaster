@@ -128,6 +128,12 @@ export class AppController {
     return this.appService.getOffers();
   }
 
+  @Patch('job-cards/:id/rating')
+  async updateRating(@Param('id') id: string, @Body() body: { rating: number }): Promise<{ ok: boolean }> {
+    await this.appService.updateRating(id, body.rating);
+    return { ok: true };
+  }
+
   @Post('spare-parts')
   async addSparePart(@Body() data: any): Promise<SparePartMaster> {
     return this.appService.addSparePartToMaster(data);
