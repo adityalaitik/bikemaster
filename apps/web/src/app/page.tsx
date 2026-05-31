@@ -4541,7 +4541,6 @@ export default function Home() {
 
                         {/* Middle Segment */}
                         {(() => {
-                          const isExpanded = expandedCardId === job.id;
                           const currentRating = jobRatings[job.id] ?? (job as any).rating ?? 0;
                           const actions = [
                             { icon: FileText, label: "JC/Est" },
@@ -4550,7 +4549,7 @@ export default function Home() {
                             { icon: DollarSign, label: "Payments" },
                             { icon: Percent, label: "Discount" },
                             { icon: Printer, label: "Invoice" },
-                            { icon: isExpanded ? ChevronUp : MoreHorizontal, label: isExpanded ? "View Less" : "View More", isMore: true },
+                            { icon: MoreHorizontal, label: "View More", isMore: true },
                           ];
                           const infoFields = (
                             <>
@@ -4606,11 +4605,8 @@ export default function Home() {
                                 e.stopPropagation();
                                 e.preventDefault();
                                 if (action.label === "View More") {
-                                  setExpandedCardId(job.id);
                                   setSelectedJob(job);
                                   setIsSidePanelOpen(true);
-                                } else if (action.label === "View Less") {
-                                  setExpandedCardId(null);
                                 } else {
                                   handleJobAction(job, action.label);
                                 }
@@ -4627,48 +4623,23 @@ export default function Home() {
                           ));
                           return (
                             <div className="bg-white dark:bg-slate-900 px-6 py-3">
-                              {isExpanded ? (
-                                /* Expanded: two rows */
-                                <div className="flex flex-col gap-3">
-                                  <div className="flex items-center gap-x-8 flex-wrap gap-y-2">
-                                    {infoFields}
-                                  </div>
-                                  <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3">
-                                    <div className="flex items-center gap-x-5 flex-wrap gap-y-2">
-                                      {actionButtons}
-                                    </div>
-                                    <div className="relative flex items-center justify-center shrink-0 ml-4">
-                                      <svg className="w-12 h-12 transform -rotate-90">
-                                        <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
-                                        <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
-                                          strokeDasharray={125.7}
-                                          strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
-                                          strokeLinecap="round"
-                                        />
-                                      </svg>
-                                      <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
-                                    </div>
-                                  </div>
+                              {/* Single row: info + divider + action buttons + progress */}
+                              <div className="flex items-center gap-x-6 overflow-x-auto">
+                                {infoFields}
+                                <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 shrink-0 mx-1" />
+                                {actionButtons}
+                                <div className="relative flex items-center justify-center shrink-0 ml-2">
+                                  <svg className="w-12 h-12 transform -rotate-90">
+                                    <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
+                                    <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
+                                      strokeDasharray={125.7}
+                                      strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
+                                      strokeLinecap="round"
+                                    />
+                                  </svg>
+                                  <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
                                 </div>
-                              ) : (
-                                /* Collapsed: single row — info + divider + action buttons + progress */
-                                <div className="flex items-center gap-x-6 overflow-x-auto">
-                                  {infoFields}
-                                  <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 shrink-0 mx-1" />
-                                  {actionButtons}
-                                  <div className="relative flex items-center justify-center shrink-0 ml-2">
-                                    <svg className="w-12 h-12 transform -rotate-90">
-                                      <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
-                                      <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
-                                        strokeDasharray={125.7}
-                                        strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
-                                        strokeLinecap="round"
-                                      />
-                                    </svg>
-                                    <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
-                                  </div>
-                                </div>
-                              )}
+                              </div>
                             </div>
                           );
                         })()}
