@@ -37,9 +37,40 @@ interface GeneratedInvoice {
   vehicleNo: string;
   brandModel: string;
   subtotal: number;
-  tax: number;
-  total: number;
-  pdfUrl: string;
+  discountAmount: number;
+  taxAmount: number;
+  totalAmount: number;
+  customerAmount: number;
+  insuranceAmount: number;
+}
+
+interface PackageItem {
+  type: 'spare' | 'service';
+  id: string;
+  name: string;
+  code: string;
+  qty: number;
+  price: number;
+  mrp: number;
+  hsn: string;
+}
+
+interface PackageMaster {
+  id: string;
+  name: string;
+  description: string;
+  totalPrice: number;
+  spares: PackageItem[];
+  services: PackageItem[];
+}
+
+interface OfferMaster {
+  id: string;
+  title: string;
+  description: string;
+  offerType: string;
+  discountValue: number;
+  endDate: string;
 }
 
 interface Complaint {
@@ -169,6 +200,9 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
   const [appliedOffers, setAppliedOffers] = useState<string[]>([]);
   const [selectedPackage, setSelectedPackage] = useState("");
   const [discountAmount, setDiscountAmount] = useState(0);
+  const [packagesMaster, setPackagesMaster] = useState<PackageMaster[]>([]);
+  const [offersMaster, setOffersMaster] = useState<OfferMaster[]>([]);
+  const [employeesList, setEmployeesList] = useState<{ id: string; name: string; role: string }[]>([]);
 
   // Complaints states
   const [allocatedComplaints, setAllocatedComplaints] = useState<Complaint[]>([]);
@@ -254,21 +288,31 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Fire job card fetch and catalog fetch in parallel
-        const [jobRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/job-cards/${jobCardId}`, { headers: getAuthHeaders() }),
+        const authHeaders = getAuthHeaders();
+        const [jobRes, , pkgRes, offerRes, empRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/job-cards/${jobCardId}`, { headers: authHeaders }),
           fetchCatalog(""),
+          fetch(`${API_BASE_URL}/packages`, { headers: authHeaders }),
+          fetch(`${API_BASE_URL}/offers`, { headers: authHeaders }),
+          fetch(`${API_BASE_URL}/employees`, { headers: authHeaders }),
         ]);
+
+        if (pkgRes.ok) setPackagesMaster(await pkgRes.json());
+        if (offerRes.ok) setOffersMaster(await offerRes.json());
+        if (empRes.ok) setEmployeesList(await empRes.json());
 
         if (jobRes.ok) {
           const jobData = await jobRes.json();
           setJob(jobData);
           setAllocatedSpares(jobData.spares.map((s: SpareItem) => ({ ...s, billedTo: s.billedTo || "customer" })));
           setAllocatedServices(jobData.services.map((s: ServiceItem) => ({ ...s, billedTo: s.billedTo || "customer" })));
-          setAllocatedComplaints(jobData.complaints || []);
-          setRejectedItems((jobData.complaints || []).filter((c: Complaint) => c.action === "declined").map((c: Complaint) => ({ type: "complaint", name: c.text, reason: c.finding || "Declined by customer" })));
+
+          // Load complaints from dedicated endpoint
+          const cmpRes = await fetch(`${API_BASE_URL}/job-cards/${jobCardId}/complaints`, { headers: authHeaders });
+          const complaints: Complaint[] = cmpRes.ok ? await cmpRes.json() : (jobData.complaints || []);
+          setAllocatedComplaints(complaints);
+          setRejectedItems(complaints.filter((c: Complaint) => c.action === "declined").map((c: Complaint) => ({ type: "complaint", name: c.text, reason: c.finding || "Declined by customer" })));
         } else {
-          // 401, 404 or any non-ok — load offline mock so the page is usable
           triggerToast("Using offline data — job card not found in DB", "warn");
           loadFallbackJob();
         }
@@ -283,26 +327,15 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
   // Fetch catalogs dynamically
   const fetchCatalog = async (q: string) => {
     try {
+      const authHeaders = getAuthHeaders();
       const [sparesRes, servicesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/spare-parts/search?q=${q}`, { headers: getAuthHeaders() }),
-        fetch(`${API_BASE_URL}/services/search?q=${q}`, { headers: getAuthHeaders() }),
+        fetch(`${API_BASE_URL}/spare-parts/search?q=${encodeURIComponent(q)}`, { headers: authHeaders }),
+        fetch(`${API_BASE_URL}/services/search?q=${encodeURIComponent(q)}`, { headers: authHeaders }),
       ]);
-      
-      if (sparesRes.ok && servicesRes.ok) {
-        setSparesCatalog(await sparesRes.json());
-        setServicesCatalog(await servicesRes.json());
-      }
+      if (sparesRes.ok) setSparesCatalog(await sparesRes.json());
+      if (servicesRes.ok) setServicesCatalog(await servicesRes.json());
     } catch (err) {
-      console.error(err);
-      // Simulating standard catalogues locally
-      setSparesCatalog([
-        { id: 'p1', name: 'Front Brake Shoe Assembly', partNumber: 'BP-HON-098', price: 350, mrp: 380, stockQty: 45, hsnCode: 'HSN-8708' },
-        { id: 'p2', name: 'Engine Oil Premium 10W30 (800ml)', partNumber: 'SP-OIL-12', price: 450, mrp: 480, stockQty: 120, hsnCode: 'HSN-2710' }
-      ]);
-      setServicesCatalog([
-        { id: 's1', name: 'General Service Standard Labor', code: 'SRV-GEN-01', rate: 650, sacCode: 'SAC-9987' },
-        { id: 's2', name: 'Express Washing & Polishing Bundle', code: 'SRV-WSH-02', rate: 400, sacCode: 'SAC-9987' }
-      ]);
+      console.error("Catalog fetch failed", err);
     }
   };
 
@@ -391,81 +424,80 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
     triggerToast("Toggled billing split preference", "info");
   };
 
-  // Apply standard service package inline
+  // Apply service package from DB
   const applyPackage = () => {
     if (!selectedPackage) return;
-    if (selectedPackage === "Premium Annual Tune-up") {
-      const oil = { name: "Engine Oil Premium 10W30 (800ml)", qty: 1, price: 450, mrp: 480, hsn: "HSN-2710", code: "SP-OIL-12", status: "issued", billedTo: "customer" as const };
-      const plug = { name: "Spark Plug Champion Premium", qty: 1, price: 120, mrp: 140, hsn: "HSN-8511", code: "SPK-PLG-01", status: "issued", billedTo: "customer" as const };
-      setAllocatedSpares([...allocatedSpares, oil, plug]);
+    const pkg = packagesMaster.find(p => p.id === selectedPackage);
+    if (!pkg) return;
 
-      const labor = { name: "General Service Standard Labor", rate: 650, hsn: "SAC-9987", code: "SRV-GEN-01", status: "completed", billedTo: "customer" as const };
-      const wash = { name: "Express Washing & Polishing Bundle", rate: 400, hsn: "SAC-9987", code: "SRV-WSH-02", status: "completed", billedTo: "customer" as const };
-      setAllocatedServices([...allocatedServices, labor, wash]);
+    const newSpares = pkg.spares.map(s => ({ name: s.name, qty: s.qty, price: s.price, mrp: s.mrp, hsn: s.hsn, code: s.code, status: "estimated", billedTo: "customer" as const }));
+    const newServices = pkg.services.map(s => ({ name: s.name, rate: s.price, hsn: s.hsn, code: s.code, status: "estimated", billedTo: "customer" as const }));
 
-      triggerToast("Premium Annual Tune-up package applied successfully!", "success");
-    } else if (selectedPackage === "Accidental Body Restoration") {
-      const fender = { name: "Bajaj Pulsar Front Fender (Black)", qty: 1, price: 1200, mrp: 1250, hsn: "HSN-8708", code: "SP-FND-43", status: "issued", billedTo: "customer" as const };
-      const fork = { name: "Front Fork Pipe Set Assembly", qty: 1, price: 2800, mrp: 3000, hsn: "HSN-8708", code: "SP-FRK-12", status: "issued", billedTo: "customer" as const };
-      setAllocatedSpares([...allocatedSpares, fender, fork]);
-
-      const bodyLabor = { name: "Accidental Body Fitting Labor", rate: 800, hsn: "SAC-9987", code: "SRV-LAB-04", status: "completed", billedTo: "customer" as const };
-      const alignLabor = { name: "Fork Alignment and Straightening", rate: 600, hsn: "SAC-9987", code: "SRV-FRK-01", status: "completed", billedTo: "customer" as const };
-      setAllocatedServices([...allocatedServices, bodyLabor, alignLabor]);
-
-      triggerToast("Accidental Body Restoration package applied!", "success");
-    }
+    setAllocatedSpares([...allocatedSpares, ...newSpares]);
+    setAllocatedServices([...allocatedServices, ...newServices]);
+    triggerToast(`${pkg.name} package applied successfully!`, "success");
     setSelectedPackage("");
   };
 
-  // Apply simulated offers and promotions
-  const applyOffer = (offer: string) => {
-    if (appliedOffers.includes(offer)) {
+  // Apply offer from DB
+  const applyOffer = (offerId: string) => {
+    if (appliedOffers.includes(offerId)) {
       triggerToast("Offer already applied", "warn");
       return;
     }
-    setAppliedOffers([...appliedOffers, offer]);
-    if (offer === "Super Summer Discount (10% off Labor)") {
-      const discount = Math.round(serviceSubtotal * 0.1);
+    const offer = offersMaster.find(o => o.id === offerId);
+    if (!offer) return;
+    setAppliedOffers([...appliedOffers, offerId]);
+
+    if (offer.offerType === "percentage") {
+      const discount = Math.round(serviceSubtotal * (offer.discountValue / 100));
       setDiscountAmount(prev => prev + discount);
-      triggerToast("10% Labor Discount applied!", "success");
-    } else if (offer === "Loyal Rider Benefit (Flat ₹100 off)") {
-      setDiscountAmount(prev => prev + 100);
-      triggerToast("₹100 Loyal Rider Discount applied!", "success");
-    } else if (offer === "Engine Flush Combo (Free Flush Fluid)") {
-      const freeFlush = { name: "Engine Flush Fluid Premium", qty: 1, price: 0, mrp: 150, hsn: "HSN-3811", code: "SP-FLSH-01", status: "issued", billedTo: "customer" as const };
-      setAllocatedSpares([...allocatedSpares, freeFlush]);
-      triggerToast("Free Engine Flush Fluid added to spares!", "success");
+      triggerToast(`${offer.discountValue}% Discount applied! (-₹${discount})`, "success");
+    } else if (offer.offerType === "fixed") {
+      setDiscountAmount(prev => prev + offer.discountValue);
+      triggerToast(`₹${offer.discountValue} Discount applied!`, "success");
+    } else if (offer.offerType === "free_part") {
+      const freePart = { name: `FREE: ${offer.title}`, qty: 1, price: 0, mrp: offer.discountValue, hsn: "N/A", code: `FREE-${offerId.slice(0, 6)}`, status: "issued", billedTo: "customer" as const };
+      setAllocatedSpares(prev => [...prev, freePart]);
+      triggerToast(`Free item added to estimate!`, "success");
     }
   };
 
-  // Add customer complaint dynamically
-  const handleAddComplaint = () => {
+  // Add customer complaint dynamically and save to DB
+  const handleAddComplaint = async () => {
     if (!newComplaintText.trim()) return;
-    const complaint = {
-      text: newComplaintText,
-      finding: newComplaintFinding,
-      action: newComplaintAction
-    };
-    setAllocatedComplaints([...allocatedComplaints, complaint]);
-    
+    const complaint: Complaint = { text: newComplaintText, finding: newComplaintFinding, action: newComplaintAction };
+    const updated = [...allocatedComplaints, complaint];
+    setAllocatedComplaints(updated);
     if (newComplaintAction === "declined") {
       setRejectedItems(prev => [...prev, { type: "complaint", name: newComplaintText, reason: newComplaintFinding || "Declined by customer" }]);
     }
-    
     setNewComplaintText("");
     setNewComplaintFinding("");
+    if (job) {
+      try {
+        await fetch(`${API_BASE_URL}/job-cards/${job.id}/complaints`, {
+          method: "POST", headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+          body: JSON.stringify({ complaints: updated }),
+        });
+      } catch { /* silent */ }
+    }
     triggerToast("Customer complaint logged successfully!", "success");
   };
 
   // Remove applied offer
-  const removeAppliedOffer = (offer: string, idx: number) => {
+  const removeAppliedOffer = (offerId: string, idx: number) => {
     setAppliedOffers(prev => prev.filter((_, i) => i !== idx));
-    if (offer === "Super Summer Discount (10% off Labor)") {
-      const discount = Math.round(serviceSubtotal * 0.1);
-      setDiscountAmount(prev => Math.max(0, prev - discount));
-    } else if (offer === "Loyal Rider Benefit (Flat ₹100 off)") {
-      setDiscountAmount(prev => Math.max(0, prev - 100));
+    const offer = offersMaster.find(o => o.id === offerId);
+    if (offer) {
+      if (offer.offerType === "percentage") {
+        const discount = Math.round(serviceSubtotal * (offer.discountValue / 100));
+        setDiscountAmount(prev => Math.max(0, prev - discount));
+      } else if (offer.offerType === "fixed") {
+        setDiscountAmount(prev => Math.max(0, prev - offer.discountValue));
+      } else if (offer.offerType === "free_part") {
+        setAllocatedSpares(prev => prev.filter(s => !s.code.startsWith("FREE-")));
+      }
     }
     triggerToast("Offer removed successfully", "info");
   };
@@ -502,45 +534,36 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
   const gstAmount = Math.round(subtotal * 0.18);
   const netTotal = subtotal + gstAmount;
 
-  // Save the entire Estimate back to the database
+  // Save the entire Estimate (spares, services, complaints) to the database
   const handleSaveEstimate = async () => {
     if (!job) return;
     try {
-      const sparesRes = await fetch(`${API_BASE_URL}/job-cards/${job.id}/spare-items`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: allocatedSpares })
-      });
-      const servicesRes = await fetch(`${API_BASE_URL}/job-cards/${job.id}/service-items`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: allocatedServices })
-      });
-
-      // Update basic job card status flags
-      await fetch(`${API_BASE_URL}/job-cards/${job.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          isEstimated: true, 
-          completion: 20,
-          estimate: netTotal 
-        })
-      });
+      const headers = { "Content-Type": "application/json", ...getAuthHeaders() };
+      const [sparesRes, servicesRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/job-cards/${job.id}/spare-items`, {
+          method: "POST", headers, body: JSON.stringify({ items: allocatedSpares }),
+        }),
+        fetch(`${API_BASE_URL}/job-cards/${job.id}/service-items`, {
+          method: "POST", headers, body: JSON.stringify({ items: allocatedServices }),
+        }),
+        fetch(`${API_BASE_URL}/job-cards/${job.id}/complaints`, {
+          method: "POST", headers, body: JSON.stringify({ complaints: allocatedComplaints }),
+        }),
+        fetch(`${API_BASE_URL}/job-cards/${job.id}`, {
+          method: "PATCH", headers, body: JSON.stringify({ isEstimated: allocatedSpares.length > 0 || allocatedServices.length > 0, completion: Math.max(job.completion || 10, 20), overallDiscount: discountAmount }),
+        }),
+      ]);
 
       if (sparesRes.ok && servicesRes.ok) {
-        triggerToast("Estimate details saved in database!", "success");
-        // refresh job card totals from backend
-        const updatedRes = await fetch(`${API_BASE_URL}/job-cards/${job.id}`);
-        if (updatedRes.ok) {
-          setJob(await updatedRes.json());
-        }
+        triggerToast("Draft saved to database!", "success");
+        const updatedRes = await fetch(`${API_BASE_URL}/job-cards/${job.id}`, { headers: getAuthHeaders() });
+        if (updatedRes.ok) setJob(await updatedRes.json());
       } else {
-        triggerToast("Failed to save changes", "warn");
+        triggerToast("Failed to save some changes", "warn");
       }
     } catch (err) {
       console.error(err);
-      triggerToast("Changes saved locally (Offline Fallback)", "success");
+      triggerToast("Save failed - check connection", "warn");
     }
   };
 
@@ -676,33 +699,29 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
     }, 400);
   };
 
-  // Print invoice and trigger PDF generation emulations
+  // Compile Estimate: save everything then create invoice record in DB
   const handlePrintPdf = async () => {
     if (!job) return;
-    await handleSaveEstimate(); // Ensure everything is saved first!
+    await handleSaveEstimate();
     try {
-      const res = await fetch(`${API_BASE_URL}/invoices/generate-pdf/${job.id}`, { method: "POST" });
+      const res = await fetch(`${API_BASE_URL}/invoices/generate-pdf/${job.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ subtotal, discountAmount, taxAmount: gstAmount, totalAmount: netTotal, customerAmount: customerBilled, insuranceAmount: insuranceBilled }),
+      });
       if (res.ok) {
         const inv = await res.json();
-        setGeneratedInvoice(inv);
+        setGeneratedInvoice({ ...inv, taxAmount: inv.taxAmount ?? gstAmount, totalAmount: inv.totalAmount ?? netTotal });
         setIsInvoiceModalOpen(true);
-        triggerToast("Tax Invoice compiled successfully!", "success");
+        triggerToast("Estimate compiled and saved to database!", "success");
+      } else {
+        throw new Error("Invoice API failed");
       }
     } catch (err) {
       console.error(err);
-      setGeneratedInvoice({
-        invoiceNo: `INV-BBR-2026-00984`,
-        jobCardNo: job.id,
-        customerName: job.customerName,
-        vehicleNo: job.vehicleNo,
-        brandModel: job.brandModel,
-        subtotal: subtotal,
-        tax: gstAmount,
-        total: netTotal,
-        pdfUrl: `https://bikemasters.storage.azure.in/invoices/inv-bbr-${job.id.toLowerCase()}.pdf`
-      });
+      setGeneratedInvoice({ invoiceNo: `INV-BBR-${new Date().getFullYear()}-DRAFT`, jobCardNo: job.id, customerName: job.customerName, vehicleNo: job.vehicleNo, brandModel: job.brandModel, subtotal, discountAmount, taxAmount: gstAmount, totalAmount: netTotal, customerAmount: customerBilled, insuranceAmount: insuranceBilled });
       setIsInvoiceModalOpen(true);
-      triggerToast("Tax Invoice compiled (Offline Fallback)!", "success");
+      triggerToast("Estimate compiled (check DB connection)", "warn");
     }
   };
 
@@ -928,99 +947,54 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
                 <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400">
                   Select applicable promotional coupons and campaign codes to apply discounts.
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  
-                  {/* Offer A */}
-                  <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 font-extrabold text-[9px] uppercase tracking-wide">Campaign</span>
-                        <h4 className="font-extrabold text-slate-800 dark:text-white text-xs mt-1">Super Summer Discount</h4>
-                        <p className="text-[10px] text-slate-650 dark:text-slate-400 mt-1 leading-relaxed">Save 10% on standard labor charges across all services.</p>
+                {offersMaster.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic p-4 text-center">No active offers available.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {offersMaster.map(offer => (
+                      <div key={offer.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 font-extrabold text-[9px] uppercase tracking-wide">
+                              {offer.offerType === "percentage" ? "% Discount" : offer.offerType === "fixed" ? "Flat Off" : "Free Item"}
+                            </span>
+                            <h4 className="font-extrabold text-slate-800 dark:text-white text-xs mt-1">{offer.title}</h4>
+                            <p className="text-[10px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">{offer.description}</p>
+                          </div>
+                          <Tag className="h-5 w-5 text-indigo-500 dark:text-indigo-400 shrink-0" />
+                        </div>
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-slate-800/80">
+                          <span className="text-[10px] text-slate-500 font-bold">Expires: {offer.endDate ? new Date(offer.endDate).toLocaleDateString("en-IN") : "N/A"}</span>
+                          <button
+                            onClick={() => applyOffer(offer.id)}
+                            className={`px-3 py-1.5 rounded-xl font-black text-[10px] transition-colors ${
+                              appliedOffers.includes(offer.id) ? "bg-green-500 text-slate-900" : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                            }`}
+                          >
+                            {appliedOffers.includes(offer.id) ? "Applied ✓" : "Apply Offer"}
+                          </button>
+                        </div>
                       </div>
-                      <Tag className="h-5 w-5 text-indigo-500 dark:text-indigo-400 shrink-0" />
-                    </div>
-                    <div className="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-slate-800/80">
-                      <span className="text-[10px] text-slate-500 font-bold">Expires: 31 July 2026</span>
-                      <button
-                        onClick={() => applyOffer("Super Summer Discount (10% off Labor)")}
-                        className={`px-3 py-1.5 rounded-xl font-black text-[10px] transition-colors ${
-                          appliedOffers.includes("Super Summer Discount (10% off Labor)")
-                            ? "bg-green-500 text-slate-900"
-                            : "bg-indigo-600 hover:bg-indigo-700 text-white"
-                        }`}
-                      >
-                        {appliedOffers.includes("Super Summer Discount (10% off Labor)") ? "Applied ✓" : "Apply Offer"}
-                      </button>
-                    </div>
+                    ))}
                   </div>
-
-                  {/* Offer B */}
-                  <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-650 dark:text-amber-400 font-extrabold text-[9px] uppercase tracking-wide">Loyalty</span>
-                        <h4 className="font-extrabold text-slate-800 dark:text-white text-xs mt-1">Loyal Rider Benefit</h4>
-                        <p className="text-[10px] text-slate-650 dark:text-slate-400 mt-1 leading-relaxed">Flat ₹100 deduction applied automatically to final invoice.</p>
-                      </div>
-                      <Tag className="h-5 w-5 text-amber-500 dark:text-amber-400 shrink-0" />
-                    </div>
-                    <div className="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-slate-800/80">
-                      <span className="text-[10px] text-slate-500 font-bold">Valid for 3rd+ visit</span>
-                      <button
-                        onClick={() => applyOffer("Loyal Rider Benefit (Flat ₹100 off)")}
-                        className={`px-3 py-1.5 rounded-xl font-black text-[10px] transition-colors ${
-                          appliedOffers.includes("Loyal Rider Benefit (Flat ₹100 off)")
-                            ? "bg-green-500 text-slate-900"
-                            : "bg-indigo-600 hover:bg-indigo-700 text-white"
-                        }`}
-                      >
-                        {appliedOffers.includes("Loyal Rider Benefit (Flat ₹100 off)") ? "Applied ✓" : "Apply Offer"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Offer C */}
-                  <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-extrabold text-[9px] uppercase tracking-wide">Bundle Deal</span>
-                        <h4 className="font-extrabold text-slate-800 dark:text-white text-xs mt-1">Engine Flush Combo</h4>
-                        <p className="text-[10px] text-slate-650 dark:text-slate-400 mt-1 leading-relaxed">Free Engine Flush Premium fluid worth ₹150 added instantly.</p>
-                      </div>
-                      <Tag className="h-5 w-5 text-emerald-500 dark:text-emerald-400 shrink-0" />
-                    </div>
-                    <div className="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-slate-800/80">
-                      <span className="text-[10px] text-slate-500 font-bold">With any major service</span>
-                      <button
-                        onClick={() => applyOffer("Engine Flush Combo (Free Flush Fluid)")}
-                        className={`px-3 py-1.5 rounded-xl font-black text-[10px] transition-colors ${
-                          appliedOffers.includes("Engine Flush Combo (Free Flush Fluid)")
-                            ? "bg-green-500 text-slate-900"
-                            : "bg-indigo-600 hover:bg-indigo-700 text-white"
-                        }`}
-                      >
-                        {appliedOffers.includes("Engine Flush Combo (Free Flush Fluid)") ? "Applied ✓" : "Apply Offer"}
-                      </button>
-                    </div>
-                  </div>
-
-                </div>
+                )}
 
                 {appliedOffers.length > 0 && (
                   <div className="space-y-2.5 pt-4">
                     <h5 className="text-[10px] font-black text-slate-550 dark:text-slate-500 uppercase tracking-widest">Active discounts applied</h5>
                     <div className="space-y-2">
-                      {appliedOffers.map((o, idx) => (
-                        <div key={idx} className="flex justify-between items-center p-3 rounded-xl bg-green-500/5 border border-green-500/25 text-xs text-green-600 dark:text-green-400">
-                          <span className="font-bold">{o}</span>
-                          <button onClick={() => removeAppliedOffer(o, idx)} className="text-red-500 dark:text-red-400 hover:text-red-650 dark:hover:text-red-300 font-extrabold text-[10px]">Remove</button>
-                        </div>
-                      ))}
+                      {appliedOffers.map((offerId, idx) => {
+                        const o = offersMaster.find(x => x.id === offerId);
+                        return (
+                          <div key={idx} className="flex justify-between items-center p-3 rounded-xl bg-green-500/5 border border-green-500/25 text-xs text-green-600 dark:text-green-400">
+                            <span className="font-bold">{o?.title || offerId}</span>
+                            <button onClick={() => removeAppliedOffer(offerId, idx)} className="text-red-500 dark:text-red-400 hover:text-red-650 dark:hover:text-red-300 font-extrabold text-[10px]">Remove</button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
-
               </div>
             )}
 
@@ -1138,50 +1112,41 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
                   <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Apply Service Packages Bundle</span>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="flex flex-col">
-                      <label className="text-[10px] font-bold text-slate-500 mb-1 font-semibold">Select Package Name</label>
+                      <label className="text-[10px] font-bold text-slate-500 mb-1">Select Package Name</label>
                       <select
                         value={selectedPackage}
                         onChange={(e) => setSelectedPackage(e.target.value)}
                         className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white text-xs focus:outline-none border border-slate-200 dark:border-slate-700 font-bold"
                       >
                         <option value="">-- Choose Package Bundle --</option>
-                        <option value="Premium Annual Tune-up">Premium Annual Tune-up (MRP: ₹1250)</option>
-                        <option value="Accidental Body Restoration">Accidental Body Restoration (MRP: ₹4500)</option>
+                        {packagesMaster.map(pkg => (
+                          <option key={pkg.id} value={pkg.id}>{pkg.name} (MRP: ₹{pkg.totalPrice.toLocaleString("en-IN")})</option>
+                        ))}
                       </select>
                     </div>
-                    <div className="flex flex-col w-[120px]">
-                      <label className="text-[10px] font-bold text-slate-500 mb-1">Quantity</label>
-                      <input
-                        type="number"
-                        readOnly
-                        value="1"
-                        className="px-3.5 py-2 rounded-lg bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 text-xs cursor-not-allowed focus:outline-none border border-slate-200 dark:border-transparent"
-                      />
-                    </div>
                   </div>
+                  {selectedPackage && (() => {
+                    const pkg = packagesMaster.find(p => p.id === selectedPackage);
+                    if (!pkg) return null;
+                    return (
+                      <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] space-y-1">
+                        <span className="font-bold text-slate-600 dark:text-slate-300 block">{pkg.description}</span>
+                        <span className="text-slate-500">Includes: {[...pkg.spares.map(s => s.name), ...pkg.services.map(s => s.name)].join(", ")}</span>
+                      </div>
+                    );
+                  })()}
                   <div className="flex justify-between items-center pt-2">
                     <div className="text-xs">
                       <span className="text-slate-500 font-semibold block">Total Package MRP:</span>
                       <span className="text-sm font-black text-green-600 dark:text-green-400">
-                        {selectedPackage === "Premium Annual Tune-up" ? "₹1,250" : selectedPackage === "Accidental Body Restoration" ? "₹4,500" : "₹0"}
+                        ₹{selectedPackage ? (packagesMaster.find(p => p.id === selectedPackage)?.totalPrice || 0).toLocaleString("en-IN") : "0"}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={applyPackage}
-                      className="px-4 py-2 bg-green-500 text-slate-900 font-extrabold text-xs rounded-xl hover:bg-green-600 transition-colors shadow-sm"
-                    >
+                    <button type="button" onClick={applyPackage} className="px-4 py-2 bg-green-500 text-slate-900 font-extrabold text-xs rounded-xl hover:bg-green-600 transition-colors shadow-sm">
                       Apply Package Items
                     </button>
                   </div>
                 </div>
-
-                <div className="p-3.5 bg-indigo-50/40 dark:bg-slate-900/30 rounded-xl border border-indigo-100/50 dark:border-slate-800/80 text-[10px] text-indigo-950 dark:text-slate-500 leading-relaxed space-y-2">
-                  <span className="font-bold text-indigo-900 dark:text-slate-400 block">Package Inclusion Matrix:</span>
-                  <p>1. **Premium Annual Tune-up**: Includes Standard Engine Oil, Spark Plug parts, Standard labor, and complete washing bundle.</p>
-                  <p>2. **Accidental Body Restoration**: Includes Pulsar Fender, Fork Pipe Set, body labor works, and complete fork straightening alignment labor.</p>
-                </div>
-
               </div>
             )}
 
@@ -1266,10 +1231,19 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
                             <button onClick={() => handleSpareQtyChange(idx, 1)} className="text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white font-black text-sm px-1.5 bg-transparent border-0">+</button>
                           </div>
 
-                          {/* Price computation */}
-                          <div className="text-right w-20">
-                            <span className="font-extrabold block text-slate-850 dark:text-white">₹{item.price * item.qty}</span>
-                            <span className="text-[10px] text-slate-500">₹{item.price} each</span>
+                          {/* Price override + computation */}
+                          <div className="flex flex-col items-end w-24">
+                            <input
+                              type="number"
+                              value={item.price}
+                              onChange={(e) => {
+                                const copy = [...allocatedSpares];
+                                copy[idx].price = Number(e.target.value) || 0;
+                                setAllocatedSpares(copy);
+                              }}
+                              className="w-20 text-right px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-850 dark:text-white focus:outline-none focus:ring-1 focus:ring-green-500"
+                            />
+                            <span className="text-[10px] text-slate-500 mt-0.5">= ₹{(item.price * item.qty).toLocaleString("en-IN")}</span>
                           </div>
 
                         </div>
@@ -1428,7 +1402,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
               {/* Workshop Header */}
               <div className="flex justify-between border-b border-slate-300 pb-4">
                 <div className="flex items-start space-x-3">
-                  <div className="p-3 bg-red-600 text-white rounded-xl font-black text-lg tracking-tighter">BM</div>
+                  <img src="/assets/bike_master_logo.jpg" alt="BikeMasters Logo" style={{ width: 64, height: 64, objectFit: "contain", borderRadius: 8 }} />
                   <div>
                     <h4 className="font-extrabold text-base text-slate-900 uppercase">BIKE MASTERS</h4>
                     <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
@@ -1442,7 +1416,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
                   <span className="font-extrabold text-slate-900 text-sm block tracking-widest">{estimationType === "all_inclusive" ? "ESTIMATION SHEET" : "TAX INVOICE"}</span>
                   <p className="text-[10px] text-slate-600 font-mono mt-1">NO: <strong className="text-slate-900">{generatedInvoice.invoiceNo}</strong></p>
                   <p className="text-[10px] text-slate-600">JOBCARD NO: <strong className="text-slate-900">{job.id}</strong></p>
-                  <p className="text-[10px] text-slate-600 mt-0.5">DATE: 29 May 2026</p>
+                  <p className="text-[10px] text-slate-600 mt-0.5">DATE: {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
                 </div>
               </div>
 
@@ -1891,15 +1865,17 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
                         <label className="text-[10px] font-bold text-slate-500 mb-1">Technician / Mechanic In Charge</label>
                         <select
                           value={job.technician}
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             setJob({ ...job, technician: e.target.value });
+                            await fetch(`${API_BASE_URL}/job-cards/${job.id}`, { method: "PATCH", headers: { "Content-Type": "application/json", ...getAuthHeaders() }, body: JSON.stringify({ technician: e.target.value }) });
                             triggerToast(`Reassigned Technician to ${e.target.value}`, "info");
                           }}
                           className="px-3.5 py-2.5 rounded-lg bg-slate-800 text-white text-xs focus:outline-none focus:ring-1 focus:ring-green-500 font-bold"
                         >
-                          <option value="Manoj Kumar">Manoj Kumar (Senior Grade-I Mechanic)</option>
-                          <option value="Ramesh Senapati">Ramesh Senapati (Engine Specialist)</option>
-                          <option value="Sukumar Barik">Sukumar Barik (Electrical/Tuning Specialist)</option>
+                          {employeesList.filter(e => e.role === "technician").map(e => (
+                            <option key={e.id} value={e.name}>{e.name}</option>
+                          ))}
+                          {employeesList.filter(e => e.role === "technician").length === 0 && <option value="">No technicians in DB</option>}
                         </select>
                       </div>
 
@@ -1907,22 +1883,20 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
                         <label className="text-[10px] font-bold text-slate-500 mb-1">Supervisor / Service Advisor</label>
                         <select
                           value={job.advisor}
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             setJob({ ...job, advisor: e.target.value });
-                            triggerToast(`Reassigned Service Advisor to ${e.target.value}`, "info");
+                            await fetch(`${API_BASE_URL}/job-cards/${job.id}`, { method: "PATCH", headers: { "Content-Type": "application/json", ...getAuthHeaders() }, body: JSON.stringify({ advisor: e.target.value }) });
+                            triggerToast(`Reassigned Advisor to ${e.target.value}`, "info");
                           }}
                           className="px-3.5 py-2.5 rounded-lg bg-slate-800 text-white text-xs focus:outline-none focus:ring-1 focus:ring-green-500 font-bold"
                         >
-                          <option value="Subhashis Sen">Subhashis Sen (Floor Manager BBR)</option>
-                          <option value="Om Prakash">Om Prakash (Senior CRM Advisor)</option>
+                          {employeesList.filter(e => e.role === "advisor").map(e => (
+                            <option key={e.id} value={e.name}>{e.name}</option>
+                          ))}
+                          {employeesList.filter(e => e.role === "advisor").length === 0 && <option value="">No advisors in DB</option>}
                         </select>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="p-4 bg-slate-900/40 rounded-2xl border border-slate-800 space-y-2 text-[10px] text-slate-555 leading-relaxed">
-                    <span className="font-bold text-slate-400 block uppercase">Advisor Notes:</span>
-                    <p>Technicians earn incentives based on turnaround time (TAT) and parts conservation ratio. Allocate work according to vehicle classification.</p>
                   </div>
                 </div>
               )}
@@ -1977,23 +1951,23 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
                       </div>
                     </div>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (!newPartMasterForm.name || !newPartMasterForm.partNo || !newPartMasterForm.price || !newPartMasterForm.mrp) {
                           triggerToast("Please fill all fields for parts master", "warn");
                           return;
                         }
-                        const p: SparePartMaster = {
-                          id: String(Date.now()),
-                          name: newPartMasterForm.name,
-                          partNumber: newPartMasterForm.partNo,
-                          price: Number(newPartMasterForm.price),
-                          mrp: Number(newPartMasterForm.mrp),
-                          stockQty: Number(newPartMasterForm.stock),
-                          hsnCode: newPartMasterForm.hsn
-                        };
-                        setSparesCatalog([p, ...sparesCatalog]);
-                        setNewPartMasterForm({ name: "", partNo: "", price: "", mrp: "", stock: "50", hsn: "HSN-8708" });
-                        triggerToast("Added new spare part to catalogue!", "success");
+                        try {
+                          const res = await fetch(`${API_BASE_URL}/spare-parts`, {
+                            method: "POST", headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                            body: JSON.stringify(newPartMasterForm),
+                          });
+                          if (res.ok) {
+                            const p = await res.json();
+                            setSparesCatalog(prev => [p, ...prev]);
+                            setNewPartMasterForm({ name: "", partNo: "", price: "", mrp: "", stock: "50", hsn: "HSN-8708" });
+                            triggerToast("Spare part saved to DB!", "success");
+                          } else { triggerToast("Failed to save part", "warn"); }
+                        } catch { triggerToast("Save failed - check connection", "warn"); }
                       }}
                       className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] rounded-xl transition-colors shadow-sm"
                     >
@@ -2047,21 +2021,23 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
                       </div>
                     </div>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (!newServiceMasterForm.name || !newServiceMasterForm.code || !newServiceMasterForm.rate) {
                           triggerToast("Please fill all fields for services master", "warn");
                           return;
                         }
-                        const s: ServiceMaster = {
-                          id: String(Date.now()),
-                          name: newServiceMasterForm.name,
-                          code: newServiceMasterForm.code,
-                          rate: Number(newServiceMasterForm.rate),
-                          sacCode: newServiceMasterForm.sac
-                        };
-                        setServicesCatalog([s, ...servicesCatalog]);
-                        setNewServiceMasterForm({ name: "", code: "", rate: "", sac: "SAC-9987" });
-                        triggerToast("Added new labor service to catalogue!", "success");
+                        try {
+                          const res = await fetch(`${API_BASE_URL}/services-master`, {
+                            method: "POST", headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                            body: JSON.stringify(newServiceMasterForm),
+                          });
+                          if (res.ok) {
+                            const s = await res.json();
+                            setServicesCatalog(prev => [s, ...prev]);
+                            setNewServiceMasterForm({ name: "", code: "", rate: "", sac: "SAC-9987" });
+                            triggerToast("Service saved to DB!", "success");
+                          } else { triggerToast("Failed to save service", "warn"); }
+                        } catch { triggerToast("Save failed - check connection", "warn"); }
                       }}
                       className="w-full py-2 bg-green-600 hover:bg-green-700 text-white font-extrabold text-[10px] rounded-xl transition-colors shadow-sm"
                     >

@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query, Request } from '@nestjs/common';
-import { AppService, JobCard, SpareItem, ServiceItem, VehicleBrand, VehicleModel, Employee, SparePartMaster, ServiceMaster } from './app.service';
+import { AppService, JobCard, SpareItem, ServiceItem, VehicleBrand, VehicleModel, Employee, SparePartMaster, ServiceMaster, ComplaintDto, PackageDto, OfferDto, InvoiceDto } from './app.service';
 import { AuthService } from './auth/auth.service';
 import { Public } from './auth/public.decorator';
 import { Roles } from './auth/roles.decorator';
@@ -23,17 +23,17 @@ export class AppController {
   // ============================================================
   
   @Get('vehicle-brands')
-  getBrands(): VehicleBrand[] {
+  async getBrands(): Promise<VehicleBrand[]> {
     return this.appService.getBrands();
   }
 
   @Get('vehicle-models')
-  getModels(@Query('brandId') brandId?: string): VehicleModel[] {
+  async getModels(@Query('brandId') brandId?: string): Promise<VehicleModel[]> {
     return this.appService.getModels(brandId);
   }
 
   @Get('employees')
-  getEmployees(@Query('role') role?: string): Employee[] {
+  async getEmployees(@Query('role') role?: string): Promise<Employee[]> {
     return this.appService.getEmployees(role);
   }
 
@@ -58,7 +58,7 @@ export class AppController {
   }
 
   @Get('customer-sources')
-  getCustomerSources(): string[] {
+  async getCustomerSources(): Promise<string[]> {
     return this.appService.getCustomerSources();
   }
 
@@ -105,6 +105,42 @@ export class AppController {
   @Post('job-cards/:id/service-items')
   async saveServiceItems(@Param('id') id: string, @Body() body: { items: any[] }) {
     return this.appService.saveServiceItems(id, body.items);
+  }
+
+  @Get('job-cards/:id/complaints')
+  async getComplaints(@Param('id') id: string): Promise<ComplaintDto[]> {
+    return this.appService.getComplaints(id);
+  }
+
+  @Post('job-cards/:id/complaints')
+  async saveComplaints(@Param('id') id: string, @Body() body: { complaints: ComplaintDto[] }) {
+    await this.appService.saveComplaints(id, body.complaints);
+    return { ok: true };
+  }
+
+  @Get('packages')
+  async getPackages(): Promise<PackageDto[]> {
+    return this.appService.getPackages();
+  }
+
+  @Get('offers')
+  async getOffers(): Promise<OfferDto[]> {
+    return this.appService.getOffers();
+  }
+
+  @Post('spare-parts')
+  async addSparePart(@Body() data: any): Promise<SparePartMaster> {
+    return this.appService.addSparePartToMaster(data);
+  }
+
+  @Post('services-master')
+  async addService(@Body() data: any): Promise<ServiceMaster> {
+    return this.appService.addServiceToMaster(data);
+  }
+
+  @Post('invoices/generate-pdf/:jobCardId')
+  async generateInvoice(@Param('jobCardId') jobCardId: string, @Body() data: any): Promise<InvoiceDto> {
+    return this.appService.generateInvoice(jobCardId, data);
   }
 
   // ============================================================

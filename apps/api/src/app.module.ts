@@ -19,11 +19,17 @@ import { EmployeeEntity } from './entities/employee.entity';
 import { InventoryBatchEntity } from './entities/inventory-batch.entity';
 import { CustomerSourceEntity } from './entities/customer-source.entity';
 import { GarageEntity } from './entities/garage.entity';
+import { JobComplaintEntity } from './entities/job-complaint.entity';
+import { PackageEntity } from './entities/package.entity';
+import { PackageItemEntity } from './entities/package-item.entity';
+import { OfferEntity } from './entities/offer.entity';
+import { InvoiceEntity } from './entities/invoice.entity';
 
 const entities = [
   Customer, Vehicle, JobCardEntity, VehicleBrandEntity, VehicleModelEntity,
   SparePartEntity, ServiceEntity, JobSpareItemEntity, JobServiceItemEntity,
   EmployeeEntity, InventoryBatchEntity, CustomerSourceEntity, GarageEntity,
+  JobComplaintEntity, PackageEntity, PackageItemEntity, OfferEntity, InvoiceEntity,
 ];
 
 @Module({

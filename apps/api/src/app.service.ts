@@ -14,6 +14,11 @@ import { EmployeeEntity } from './entities/employee.entity';
 import { InventoryBatchEntity } from './entities/inventory-batch.entity';
 import { CustomerSourceEntity } from './entities/customer-source.entity';
 import { GarageEntity } from './entities/garage.entity';
+import { JobComplaintEntity } from './entities/job-complaint.entity';
+import { PackageEntity } from './entities/package.entity';
+import { PackageItemEntity } from './entities/package-item.entity';
+import { OfferEntity } from './entities/offer.entity';
+import { InvoiceEntity } from './entities/invoice.entity';
 
 export interface Complaint { text: string; finding: string; action: string; }
 export interface SpareItem { id?: string; name: string; qty: number; price: number; mrp: number; hsn: string; code: string; status: string; billedTo: 'customer' | 'insurance'; }
@@ -33,6 +38,11 @@ export interface VehicleModel { id: string; brandId: string; name: string; categ
 export interface Employee { id: string; name: string; role: string; }
 export interface SparePartMaster { id: string; name: string; partNumber: string; price: number; mrp: number; stockQty: number; hsnCode: string; }
 export interface ServiceMaster { id: string; name: string; code: string; rate: number; sacCode: string; }
+export interface ComplaintDto { text: string; finding: string; action: string; }
+export interface PackageItemDto { type: 'spare' | 'service'; id: string; name: string; code: string; qty: number; price: number; mrp: number; hsn: string; }
+export interface PackageDto { id: string; name: string; description: string; totalPrice: number; spares: PackageItemDto[]; services: PackageItemDto[]; }
+export interface OfferDto { id: string; title: string; description: string; offerType: string; discountValue: number; endDate: string; }
+export interface InvoiceDto { invoiceNo: string; jobCardNo: string; customerName: string; vehicleNo: string; brandModel: string; subtotal: number; discountAmount: number; taxAmount: number; totalAmount: number; customerAmount: number; insuranceAmount: number; }
 
 const STATUS_TO_UI: Record<string, string> = {
   under_servicing: 'Under Servicing',
@@ -77,9 +87,163 @@ export class AppService {
     @InjectRepository(InventoryBatchEntity) private batchRepo: Repository<InventoryBatchEntity>,
     @InjectRepository(CustomerSourceEntity) private sourceRepo: Repository<CustomerSourceEntity>,
     @InjectRepository(GarageEntity) private garageRepo: Repository<GarageEntity>,
+    @InjectRepository(JobComplaintEntity) private complaintRepo: Repository<JobComplaintEntity>,
+    @InjectRepository(PackageEntity) private packageRepo: Repository<PackageEntity>,
+    @InjectRepository(PackageItemEntity) private packageItemRepo: Repository<PackageItemEntity>,
+    @InjectRepository(OfferEntity) private offerRepo: Repository<OfferEntity>,
+    @InjectRepository(InvoiceEntity) private invoiceRepo: Repository<InvoiceEntity>,
   ) {}
 
   getHello(): string { return 'BikeMasters API v1 - Database Enabled'; }
+
+  // ── Complaints ────────────────────────────────────────────────────────────
+  async getComplaints(jobCardNo: string): Promise<ComplaintDto[]> {
+    const jc = await this.jobCardRepo.findOneBy({ jobCardNo });
+    if (!jc) return [];
+    const rows = await this.complaintRepo.findBy({ jobCardId: jc.id });
+    return rows.map(r => ({ text: r.complaintText, finding: r.workshopFinding || '', action: this.dbActionToFrontend(r.action) }));
+  }
+
+  async saveComplaints(jobCardNo: string, complaints: ComplaintDto[]): Promise<void> {
+    const jc = await this.jobCardRepo.findOneBy({ jobCardNo });
+    if (!jc) return;
+    await this.complaintRepo.delete({ jobCardId: jc.id });
+    if (!complaints.length) return;
+    const entities = complaints.map(c => this.complaintRepo.create({
+      jobCardId: jc.id,
+      complaintText: c.text,
+      workshopFinding: c.finding || undefined,
+      action: this.frontendActionToDb(c.action) as any,
+      isRejected: c.action === 'declined',
+    }));
+    await this.complaintRepo.save(entities);
+  }
+
+  private frontendActionToDb(action: string): string {
+    const map: Record<string, string> = { repair_now: 'repair_now', replace_now: 'repair_now', observe: 'monitor', declined: 'rejected' };
+    return map[action] || 'repair_now';
+  }
+
+  private dbActionToFrontend(action: string): string {
+    const map: Record<string, string> = { repair_now: 'repair_now', repair_later: 'repair_now', inform_customer: 'observe', monitor: 'observe', rejected: 'declined' };
+    return map[action] || 'repair_now';
+  }
+
+  // ── Packages ──────────────────────────────────────────────────────────────
+  async getPackages(): Promise<PackageDto[]> {
+    const pkgs = await this.packageRepo.find({ where: { isActive: true } });
+    if (!pkgs.length) return [];
+
+    const pkgIds = pkgs.map(p => p.id);
+    const items = await this.packageItemRepo.findBy({ packageId: In(pkgIds) });
+
+    const spareIds = items.filter(i => i.sparePartId).map(i => i.sparePartId);
+    const serviceIds = items.filter(i => i.serviceId).map(i => i.serviceId);
+
+    const [spareParts, services, batches] = await Promise.all([
+      spareIds.length ? this.sparesRepo.findBy({ id: In(spareIds) }) : [],
+      serviceIds.length ? this.servicesRepo.findBy({ id: In(serviceIds) }) : [],
+      spareIds.length ? this.batchRepo.createQueryBuilder('b').where('b.sparePartId IN (:...ids)', { ids: spareIds }).orderBy('b.createdAt', 'DESC').getMany() : [],
+    ]);
+
+    const spareMap = new Map((spareParts as SparePartEntity[]).map(s => [s.id, s]));
+    const serviceMap = new Map((services as ServiceEntity[]).map(s => [s.id, s]));
+    const latestBatch = new Map<string, InventoryBatchEntity>();
+    for (const b of batches as InventoryBatchEntity[]) {
+      if (!latestBatch.has(b.sparePartId)) latestBatch.set(b.sparePartId, b);
+    }
+
+    return pkgs.map(pkg => {
+      const pkgItems = items.filter(i => i.packageId === pkg.id);
+      const spares: PackageItemDto[] = pkgItems.filter(i => i.itemType === 'spare' && i.sparePartId).map(i => {
+        const sp = spareMap.get(i.sparePartId);
+        const b = latestBatch.get(i.sparePartId);
+        return { type: 'spare', id: i.sparePartId, name: sp?.partName || 'Part', code: sp?.partNumber || '', qty: Number(i.quantity), price: b ? Number(b.sellingPrice) : Number(i.rate), mrp: b ? Number(b.mrp) : Number(i.rate), hsn: sp?.hsnCode || 'N/A' };
+      });
+      const services2: PackageItemDto[] = pkgItems.filter(i => i.itemType === 'service' && i.serviceId).map(i => {
+        const sv = serviceMap.get(i.serviceId);
+        return { type: 'service', id: i.serviceId, name: sv?.serviceName || 'Service', code: sv?.serviceCode || '', qty: 1, price: Number(i.rate), mrp: Number(i.rate), hsn: sv?.hsnSacCode || 'N/A' };
+      });
+      return { id: pkg.id, name: pkg.packageName, description: pkg.description || '', totalPrice: Number(pkg.totalPrice), spares, services: services2 };
+    });
+  }
+
+  // ── Offers ────────────────────────────────────────────────────────────────
+  async getOffers(): Promise<OfferDto[]> {
+    const today = new Date().toISOString().split('T')[0];
+    const rows = await this.offerRepo
+      .createQueryBuilder('o')
+      .where('o.isActive = true AND o.endDate >= :today', { today })
+      .getMany();
+    return rows.map(o => ({ id: o.id, title: o.title, description: o.description || '', offerType: o.offerType, discountValue: Number(o.discountValue), endDate: o.endDate?.toString() || '' }));
+  }
+
+  // ── Add Spare Part to Master ───────────────────────────────────────────────
+  async addSparePartToMaster(data: any): Promise<SparePartMaster> {
+    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
+    const garageId = garage?.id || '';
+    const part = await this.sparesRepo.save(this.sparesRepo.create({ garageId, partName: data.name, partNumber: data.partNo, hsnCode: data.hsn || 'N/A' }));
+    const batch = await this.batchRepo.save(this.batchRepo.create({
+      sparePartId: part.id, garageId, batchNo: `BATCH-${Date.now()}`,
+      purchasePrice: Number(data.price) * 0.8, mrp: Number(data.mrp), sellingPrice: Number(data.price),
+      quantity: Number(data.stock) || 50, availableQty: Number(data.stock) || 50, purchaseDate: new Date(),
+    }));
+    return { id: part.id, name: part.partName, partNumber: part.partNumber, price: Number(batch.sellingPrice), mrp: Number(batch.mrp), stockQty: batch.availableQty, hsnCode: part.hsnCode || 'N/A' };
+  }
+
+  // ── Add Service to Master ─────────────────────────────────────────────────
+  async addServiceToMaster(data: any): Promise<ServiceMaster> {
+    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
+    const garageId = garage?.id || '';
+    const sv = await this.servicesRepo.save(this.servicesRepo.create({ garageId, serviceName: data.name, serviceCode: data.code, defaultRate: Number(data.rate), hsnSacCode: data.sac || '998714' }));
+    return { id: sv.id, name: sv.serviceName, code: sv.serviceCode, rate: Number(sv.defaultRate), sacCode: sv.hsnSacCode || 'N/A' };
+  }
+
+  // ── Generate Invoice ──────────────────────────────────────────────────────
+  async generateInvoice(jobCardNo: string, data: any): Promise<InvoiceDto> {
+    const jc = await this.jobCardRepo.findOneBy({ jobCardNo });
+    if (!jc) throw new NotFoundException(`Job card ${jobCardNo} not found`);
+
+    const [customer, vehicle] = await Promise.all([
+      this.customerRepo.findOneBy({ id: jc.customerId }),
+      this.vehicleRepo.findOneBy({ id: jc.vehicleId }),
+    ]);
+
+    let brandModel = 'Bike';
+    if (vehicle) {
+      const model = await this.modelRepo.findOneBy({ id: vehicle.modelId });
+      if (model) {
+        const brand = await this.brandRepo.findOneBy({ id: model.brandId });
+        brandModel = `${brand?.name || ''} ${model.name}`.trim();
+      }
+    }
+
+    const count = await this.invoiceRepo.count();
+    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
+    const garageCode = garage?.code?.split('-')[0] || 'BBR';
+    const year = new Date().getFullYear();
+    const invoiceNo = `INV-${garageCode}-${year}-${String(count + 1).padStart(5, '0')}`;
+
+    const subtotal = Number(data.subtotal) || 0;
+    const discountAmount = Number(data.discountAmount) || 0;
+    const taxAmount = Number(data.taxAmount) || 0;
+    const totalAmount = Number(data.totalAmount) || 0;
+    const customerAmount = Number(data.customerAmount) || totalAmount;
+    const insuranceAmount = Number(data.insuranceAmount) || 0;
+
+    const existing = await this.invoiceRepo.findOneBy({ jobCardId: jc.id });
+    const invoiceData = { invoiceNo: existing?.invoiceNo || invoiceNo, jobCardId: jc.id, garageId: jc.garageId, customerId: jc.customerId, invoiceType: 'estimate' as const, subtotal, discountAmount, taxAmount, totalAmount, customerAmount, insuranceAmount, status: 'draft' as const };
+
+    if (existing) {
+      await this.invoiceRepo.update(existing.id, { subtotal, discountAmount, taxAmount, totalAmount, customerAmount, insuranceAmount });
+    } else {
+      await this.invoiceRepo.save(this.invoiceRepo.create(invoiceData));
+    }
+
+    await this.jobCardRepo.update({ jobCardNo }, { isEstimated: true, overallDiscount: discountAmount });
+
+    return { invoiceNo: invoiceData.invoiceNo, jobCardNo, customerName: customer?.name || 'Customer', vehicleNo: vehicle?.registrationNo || 'N/A', brandModel, subtotal, discountAmount, taxAmount, totalAmount, customerAmount, insuranceAmount };
+  }
 
   // ── Brands ────────────────────────────────────────────────────────────────
   async getBrands(): Promise<VehicleBrand[]> {
@@ -230,7 +394,7 @@ export class AppService {
       const brandModel = brand && model ? `${brand.name} ${model.name}`.trim() : 'Bike';
       const dbSpares = sparesMap.get(e.jobCardNo) || [];
       const dbServices = servicesMap.get(e.jobCardNo) || [];
-      return this.buildJobCardDto(e, vehicle, customer, brandModel, dbSpares, dbServices);
+      return this.buildJobCardDto(e, vehicle ?? null, customer ?? null, brandModel, dbSpares, dbServices);
     });
   }
 
