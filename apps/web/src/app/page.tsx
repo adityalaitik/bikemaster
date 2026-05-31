@@ -3,6 +3,15 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Shield,
+  Bike,
+  Star,
+  ThumbsUp,
+  RefreshCw,
+  DollarSign,
+  Percent,
+  Printer,
+  MoreHorizontal,
   Wrench,
   Search,
   Plus,
@@ -1281,6 +1290,8 @@ export default function Home() {
   
   // Tab control inside Side Panel
   const [sidePanelTab, setSidePanelTab] = useState("Overview");
+  const [isEditingSidePanel, setIsEditingSidePanel] = useState(false);
+  const [editedJob, setEditedJob] = useState<JobCard | null>(null);
 
   // State for Toast Notifications
   const [toasts, setToasts] = useState<Array<{ id: number; msg: string; type: "success" | "info" | "warn" }>>([]);
@@ -4369,183 +4380,173 @@ export default function Home() {
                 /* Job Cards Grid */
 	                <div className="grid grid-cols-1 gap-4">
                   {filteredJobs.map((job) => {
-                    const isExpanded = selectedJob && selectedJob.id === job.id;
+                    const isSelected = selectedJob && selectedJob.id === job.id;
                     return (
-                      <div
-                        key={job.id}
+                      <div 
+                        key={job.id} 
                         onClick={() => {
-                          if (selectedJob?.id === job.id) {
-                            setSelectedJob(null);
-                          } else {
-                            setSelectedJob(job);
-                            triggerToast(`Job Card ${job.id} expanded`, "info");
-                          }
+                          setSelectedJob(job);
+                          setIsSidePanelOpen(true);
                         }}
-	                        className={`bg-white dark:bg-slate-800 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition-all duration-500 border relative overflow-hidden ${
-                          isExpanded
-                            ? "ring-2 ring-green-600 dark:ring-green-500 border-transparent bg-slate-50/50 dark:bg-slate-800/80"
-                            : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
-                        } ${getUrgencyBorder(job.urgency)}`}
+                        className={`bg-white dark:bg-slate-900 border transition-all duration-300 rounded-[2.5rem] p-1.5 shadow-sm space-y-1.5 cursor-pointer group hover:shadow-xl hover:scale-[1.005] ${isSelected ? 'ring-2 ring-green-500 border-transparent' : 'border-slate-200 dark:border-slate-800'}`}
                       >
-                        
-                        {/* Upper Header of the Card (Always Visible) */}
-                        <div className="p-4 flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <div className="flex flex-col">
-                              <span className="text-sm font-extrabold tracking-wide font-mono text-slate-900 dark:text-white">
-                                {job.vehicleNo}
-                              </span>
-                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-tighter">
-                                {job.id}
-                              </span>
+                        {/* Top Segment (Header) */}
+                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-t-[2.2rem] px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="bg-white dark:bg-slate-900 p-2 rounded-xl shadow-sm">
+                              <Shield className="h-5 w-5 text-slate-400" />
                             </div>
-                            
-                            <div className="hidden sm:flex flex-col border-l border-slate-200 dark:border-slate-700 pl-4">
-                              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{job.customerName}</h3>
-                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold">{job.brandModel}</span>
+                            <div className="flex items-center space-x-1.5">
+                              <span className="text-lg font-black tracking-tight text-slate-800 dark:text-white uppercase">{job.vehicleNo}</span>
+                              <span className="text-xs font-bold text-red-500">(Bhubaneswar)</span>
                             </div>
                           </div>
                           
                           <div className="flex items-center space-x-3">
-                            {/* Status badge (Minimal) */}
-                            <div className={`hidden sm:flex items-center border px-2.5 py-1 rounded-lg text-[10px] font-bold ${getStatusBadgeStyle(job.status)}`}>
-                              <span className="h-1.5 w-1.5 rounded-full bg-current mr-1.5 animate-pulse" />
-                              <span>{job.status}</span>
+                            <Bike className="h-5 w-5 text-slate-400" />
+                            <span className="text-sm font-black text-slate-700 dark:text-slate-300 uppercase tracking-tight">{job.brandModel}</span>
+                          </div>
+
+                          <div className="flex items-center space-x-4">
+                            <div className="flex items-center bg-teal-50 dark:bg-teal-900/30 px-3 py-1 rounded-lg border border-teal-100 dark:border-teal-800">
+                              <span className="text-[10px] font-black text-teal-600 dark:text-teal-400 mr-2 uppercase tracking-widest">KMS</span>
+                              <span className="text-xs font-black text-teal-700 dark:text-teal-300 font-mono">{job.kms.toString().padStart(6, '0')}</span>
                             </div>
-
-                            {/* Service Type badge */}
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              job.serviceType === "Regular" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400" :
-                              job.serviceType === "Accidental" ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400" :
-                              "bg-purple-50 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400"
-                            }`}>
-                              {job.serviceType}
-                            </span>
-
-                            {/* Expand/Collapse Icon */}
-                            <div className={`p-1.5 rounded-full transition-transform duration-300 ${isExpanded ? 'rotate-180 bg-slate-100 dark:bg-slate-700' : 'bg-slate-50 dark:bg-slate-900/50'}`}>
-                              <ChevronDown className="h-4 w-4 text-slate-400" />
+                            <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 border-l border-slate-200 dark:border-slate-700 pl-4 flex items-center">
+                              <span className="uppercase">NA | bike</span>
+                              <span className={`ml-4 px-2 py-0.5 rounded uppercase font-black ${getStatusBadgeStyle(job.status)}`}>
+                                {job.status === "Under Servicing" ? "IN-PROGRESS" : job.status === "Ready for Delivery" ? "READY" : "DONE"}
+                              </span>
                             </div>
                           </div>
                         </div>
 
-                        {/* Expanded Content */}
-                        <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isExpanded ? 'max-h-[500px] opacity-100 border-t border-slate-100 dark:border-slate-700/60' : 'max-h-0 opacity-0'}`}>
-                          
-                          {/* Middle Body */}
-                          <div className="p-4 space-y-4">
-                            
-                            <div className="flex flex-col sm:row sm:justify-between sm:items-start gap-4">
-                              <div className="flex flex-col sm:hidden">
-                                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{job.customerName}</h3>
-                                <div className="flex items-center text-xs text-slate-400 dark:text-slate-500 mt-1">
-                                  <Phone className="h-3 w-3 mr-1" />
-                                  <span>{job.phone}</span>
-                                </div>
-                              </div>
-
-                              <div className="flex justify-between w-full">
-                                <div className="hidden sm:flex items-center text-xs text-slate-400 dark:text-slate-500">
-                                  <Phone className="h-3 w-3 mr-1" />
-                                  <span>{job.phone}</span>
-                                </div>
-
-                                {/* Circular Completion percentage indicator */}
-                                <div className="relative flex items-center justify-center">
-                                  <svg className="w-10 h-10 transform -rotate-95">
-                                    <circle cx="20" cy="20" r="16" stroke="currentColor" className="text-slate-100 dark:text-slate-700" strokeWidth="3" fill="transparent" />
-                                    <circle cx="20" cy="20" r="16" stroke="currentColor" className="text-green-500" strokeWidth="3" fill="transparent"
-                                      strokeDasharray={100}
-                                      strokeDashoffset={100 - job.completion}
-                                    />
-                                  </svg>
-                                  <span className="absolute text-[10px] font-extrabold">{job.completion}%</span>
-                                </div>
+                        {/* Middle Segment (Details & Actions) */}
+                        <div className="bg-white dark:bg-slate-900 px-6 py-4 flex flex-col xl:flex-row items-center justify-between gap-8">
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-10 gap-y-6 w-full xl:w-auto">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Customer Name</span>
+                              <span className="text-xs font-black text-slate-800 dark:text-white uppercase leading-none">{job.customerName}</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Phone Number</span>
+                              <span className="text-xs font-black text-slate-800 dark:text-white leading-none font-mono">{job.phone}</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Customer Source</span>
+                              <span className="text-xs font-black text-slate-800 dark:text-white leading-none">Walk-in</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Customer Rating</span>
+                              <div className="flex items-center space-x-0.5">
+                                {[1,2,3,4,5].map(i => <Star key={i} className={`h-3 w-3 ${i <= 4 ? 'text-yellow-400 fill-yellow-400' : 'text-slate-200'}`} />)}
                               </div>
                             </div>
-
-                            {/* Brand/Model details & KMS */}
-                            <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl flex items-center justify-between text-xs font-semibold">
-                              <span className="text-slate-700 dark:text-slate-300">{job.brandModel}</span>
-                              <span className="text-slate-400 dark:text-slate-500">{job.kms.toLocaleString()} KMS</span>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Advisor Name</span>
+                              <span className="text-xs font-black text-slate-800 dark:text-white leading-none">{job.advisor}</span>
                             </div>
-
-                            {/* Advisor & Technician information */}
-                            <div className="flex items-center justify-between pt-1">
-                              <div className="flex items-center space-x-2">
-                                <div className="flex -space-x-2">
-                                  <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-white dark:border-slate-800 flex items-center justify-center text-[10px] font-extrabold text-slate-600 dark:text-slate-300" title={`Advisor: ${job.advisor}`}>
-                                    {job.advisor.split(' ').map(n=>n[0]).join('')}
-                                  </div>
-                                  <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-950 border-2 border-white dark:border-slate-800 flex items-center justify-center text-[10px] font-extrabold text-green-600 dark:text-green-400" title={`Technician: ${job.technician}`}>
-                                    {job.technician.split(' ').map(n=>n[0]).join('')}
-                                  </div>
-                                </div>
-                                <div className="flex flex-col text-[10px] leading-tight text-slate-400 dark:text-slate-500 font-medium">
-                                  <span>Advisor: {job.advisor}</span>
-                                  <span className="mt-0.5">Technician: {job.technician}</span>
-                                </div>
-                              </div>
-
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setIsSidePanelOpen(true);
-                                  triggerToast("Opening comprehensive details view", "info");
-                                }}
-                                className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 text-[10px] font-bold hover:bg-indigo-100 transition-colors"
-                              >
-                                <Eye className="h-3 w-3" />
-                                <span>Full Details</span>
-                              </button>
-                            </div>
-
                           </div>
 
-                          {/* Bottom Row - Estimate | Paid | Due */}
-                          <div className="px-4 py-4 bg-slate-50/60 dark:bg-slate-900/20 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
-                            
-                            <div className="flex space-x-6 font-semibold">
-                              <div className="flex flex-col">
-                                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-bold">Estimate</span>
-                                <span className="text-slate-800 dark:text-slate-200 mt-1 text-sm font-black">₹{job.estimate}</span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-bold">Paid</span>
-                                <span className="text-green-600 dark:text-green-400 mt-1 text-sm font-black">₹{job.paid}</span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-bold">Due</span>
-                                <span className="text-red-500 dark:text-red-400 mt-1 text-sm font-black">₹{job.due}</span>
-                              </div>
+                          <div className="flex items-center justify-between xl:justify-end w-full xl:w-auto space-x-4 md:space-x-8">
+                            <div className="flex items-center space-x-3 md:space-x-6 overflow-x-auto pb-1 no-scrollbar">
+                              {[
+                                { icon: FileText, label: "JC/ Est" },
+                                { icon: ThumbsUp, label: "Status" },
+                                { icon: RefreshCw, label: "History" },
+                                { icon: DollarSign, label: "Payments" },
+                                { icon: Percent, label: "Discount" },
+                                { icon: Printer, label: "Invoice" },
+                                { icon: MoreHorizontal, label: "View More", isMore: true }
+                              ].map((action, i) => (
+                                <div 
+                                  key={i} 
+                                  className="flex flex-col items-center space-y-1.5 cursor-pointer group/btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (action.label === "JC/ Est") {
+                                      router.push(`/estimation/${job.id}`);
+                                    } else if (action.label === "Invoice") {
+                                      triggerToast("Generating invoice preview...", "success");
+                                    } else if (action.label === "View More") {
+                                      setSelectedJob(job);
+                                      setIsEditingSidePanel(false);
+                                      setIsSidePanelOpen(true);
+                                    } else {
+                                      triggerToast(`Opening ${action.label} panel`, "info");
+                                    }
+                                  }}
+                                >
+                                  <div className={`p-2.5 md:p-3 rounded-full shadow-sm transition-all group-hover/btn:scale-110 ${action.isMore ? 'bg-teal-500 text-white' : 'bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white border border-slate-100 dark:border-slate-700'}`}>
+                                    <action.icon className="h-4 w-4 md:h-5 md:w-5" />
+                                  </div>
+                                  <span className="text-[9px] md:text-[10px] font-black text-slate-500 dark:text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white uppercase tracking-tighter">{action.label}</span>
+                                </div>
+                              ))}
                             </div>
 
-                            {/* Quick buttons */}
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  triggerToast(`Generating estimate printout for ${job.id}`, "success");
-                                  setTimeout(() => window.print(), 500);
-                                }}
-                                className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-[10px] font-black text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 transition-colors uppercase tracking-widest"
-                              >
-                                Estimate
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  triggerToast(`Processing invoice for ${job.id}`, "success");
-                                }}
-                                className="px-4 py-2 rounded-xl bg-green-600 text-white hover:bg-green-700 text-[10px] font-black transition-colors shadow-lg shadow-green-600/20 uppercase tracking-widest"
-                              >
-                                Pay
-                              </button>
+                            {/* Circular Progress Indicator */}
+                            <div className="relative flex items-center justify-center shrink-0">
+                              <svg className="w-14 h-14 md:w-16 md:h-16 transform -rotate-90">
+                                <circle cx="32" cy="32" r="28" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="6" fill="transparent" />
+                                <circle cx="32" cy="32" r="28" stroke="currentColor" className="text-teal-500" strokeWidth="6" fill="transparent"
+                                  strokeDasharray={175.9}
+                                  strokeDashoffset={175.9 - (175.9 * job.completion) / 100}
+                                  strokeLinecap="round"
+                                />
+                              </svg>
+                              <span className="absolute text-xs md:text-sm font-black text-slate-800 dark:text-white">{job.completion}%</span>
                             </div>
-
                           </div>
                         </div>
 
+                        {/* Bottom Segment (Billing & Dates) */}
+                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-b-[2.2rem] px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
+                          <div className="flex items-center space-x-6 w-full md:w-auto">
+                            <div className="flex items-center bg-teal-500 text-white rounded-xl overflow-hidden shadow-sm">
+                              <div className="px-3 py-1.5 text-[10px] font-black border-r border-white/20 uppercase tracking-wider">JC.No:</div>
+                              <div className="px-3 py-1.5 text-xs font-black font-mono">{job.id.split('-').pop()}</div>
+                            </div>
+                            <div className="flex flex-col items-center">
+                              <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">₹{job.estimate.toLocaleString()}</span>
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Estimate</span>
+                            </div>
+                          </div>
+
+                          <div className="flex-1 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 border-t md:border-t-0 md:border-l md:border-r border-slate-200 dark:border-slate-700 py-2 md:py-0 md:px-12 w-full">
+                            <div className="flex flex-col items-center">
+                              <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">NA</span>
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Inv No (Cust)</span>
+                            </div>
+                            <div className="flex flex-col items-center">
+                              <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">0.00</span>
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Discount</span>
+                            </div>
+                            <div className="flex flex-col items-center">
+                              <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">0</span>
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Coupon</span>
+                            </div>
+                            <div className="flex flex-col items-center">
+                              <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">₹{job.paid.toLocaleString()}</span>
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Paid (Cust)</span>
+                            </div>
+                            <div className="flex flex-col items-center">
+                              <span className="text-[11px] font-black text-red-500 dark:text-red-400 animate-pulse">₹{job.due.toLocaleString()}</span>
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Due (Cust)</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-3 w-full md:w-auto justify-end">
+                            <div className="bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-[10px] font-black shadow-sm">
+                              <span className="text-slate-400 uppercase mr-1">DOA:</span>
+                              <span className="text-teal-600 dark:text-teal-400 font-mono uppercase">{job.date}</span>
+                            </div>
+                            <div className="bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-[10px] font-black shadow-sm">
+                              <span className="text-slate-400 uppercase mr-1">DOD:</span>
+                              <span className="text-teal-600 dark:text-teal-400 font-mono uppercase">NA</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     );
                   })}
@@ -4575,22 +4576,95 @@ export default function Home() {
                     </span>
                     <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400">{selectedJob.id}</span>
                   </div>
-                  <button
-                    onClick={() => setIsSidePanelOpen(false)}
-                    className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700/80 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    {!isEditingSidePanel ? (
+                      <button
+                        onClick={() => {
+                          setEditedJob({ ...selectedJob });
+                          setIsEditingSidePanel(true);
+                        }}
+                        className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition-colors"
+                        title="Edit Job Card"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={async () => {
+                            if (!editedJob) return;
+                            try {
+                              const res = await fetch(`${API_BASE_URL}/job-cards/${editedJob.id}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(editedJob)
+                              });
+                              if (res.ok) {
+                                const updated = await res.json();
+                                setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
+                                setSelectedJob(updated);
+                                setIsEditingSidePanel(false);
+                                triggerToast("Job card updated successfully!", "success");
+                              }
+                            } catch (err) {
+                              console.error("Backend offline, updating locally", err);
+                              setJobs(prev => prev.map(j => j.id === editedJob.id ? editedJob : j));
+                              setSelectedJob(editedJob);
+                              setIsEditingSidePanel(false);
+                              triggerToast("Job card updated (Local Fallback)!", "success");
+                            }
+                          }}
+                          className="px-2 py-1 bg-green-600 text-white text-[10px] font-bold rounded-lg hover:bg-green-700"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setIsEditingSidePanel(false)}
+                          className="px-2 py-1 bg-slate-200 dark:bg-slate-700 text-[10px] font-bold rounded-lg hover:bg-slate-300"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => {
+                        setIsSidePanelOpen(false);
+                        setIsEditingSidePanel(false);
+                      }}
+                      className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700/80 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Sub-Header details info */}
                 <div className="p-4 border-b border-slate-100 dark:border-slate-700/40 flex justify-between items-start">
                   <div>
-                    <h2 className="text-lg font-black tracking-wide font-mono text-slate-900 dark:text-white">
-                      {selectedJob.vehicleNo}
-                    </h2>
-                    <p className="text-xs font-bold text-slate-600 dark:text-slate-300 mt-1">{selectedJob.brandModel}</p>
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Owner: {selectedJob.customerName}</p>
+                    {isEditingSidePanel && editedJob ? (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={editedJob.vehicleNo}
+                          onChange={(e) => setEditedJob({ ...editedJob, vehicleNo: e.target.value })}
+                          className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold font-mono"
+                        />
+                        <input
+                          type="text"
+                          value={editedJob.brandModel}
+                          onChange={(e) => setEditedJob({ ...editedJob, brandModel: e.target.value })}
+                          className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <h2 className="text-lg font-black tracking-wide font-mono text-slate-900 dark:text-white">
+                          {selectedJob.vehicleNo}
+                        </h2>
+                        <p className="text-xs font-bold text-slate-600 dark:text-slate-300 mt-1">{selectedJob.brandModel}</p>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Owner: {selectedJob.customerName}</p>
+                      </>
+                    )}
                   </div>
                   
                   {/* Status Indicator */}
@@ -4632,23 +4706,84 @@ export default function Home() {
                       {/* Customer Cards Details */}
 	                      <div className="bg-slate-50 dark:bg-slate-900/30 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
                         <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Customer Context</h4>
-                        <div className="space-y-2 text-xs">
-                          <div className="flex justify-between"><span className="text-slate-400">Full Name:</span><span className="font-semibold">{selectedJob.customerName}</span></div>
-                          <div className="flex justify-between"><span className="text-slate-400">Phone Code:</span><span className="font-semibold">{selectedJob.phone}</span></div>
-                          <div className="flex justify-between"><span className="text-slate-400">Alternates:</span><span className="font-semibold">N/A</span></div>
-                          <div className="flex justify-between"><span className="text-slate-400">GSTIN Status:</span><span className="font-semibold font-mono text-[11px] text-green-600 dark:text-green-400">21AAAAA0000A1Z0</span></div>
-                        </div>
+                        {isEditingSidePanel && editedJob ? (
+                          <div className="space-y-3 text-xs">
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-slate-400">Full Name:</span>
+                              <input
+                                type="text"
+                                value={editedJob.customerName}
+                                onChange={(e) => setEditedJob({ ...editedJob, customerName: e.target.value })}
+                                className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-semibold"
+                              />
+                            </div>
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-slate-400">Phone Code:</span>
+                              <input
+                                type="text"
+                                value={editedJob.phone}
+                                onChange={(e) => setEditedJob({ ...editedJob, phone: e.target.value })}
+                                className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-semibold"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2 text-xs">
+                            <div className="flex justify-between"><span className="text-slate-400">Full Name:</span><span className="font-semibold">{selectedJob.customerName}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-400">Phone Code:</span><span className="font-semibold">{selectedJob.phone}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-400">Alternates:</span><span className="font-semibold">N/A</span></div>
+                            <div className="flex justify-between"><span className="text-slate-400">GSTIN Status:</span><span className="font-semibold font-mono text-[11px] text-green-600 dark:text-green-400">21AAAAA0000A1Z0</span></div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Technical Specs Checklist */}
 	                      <div className="bg-slate-50 dark:bg-slate-900/30 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
                         <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2.5">Technical & Checklist Specifications</h4>
-                        <div className="grid grid-cols-2 gap-3 text-xs">
-                          <div className="flex flex-col"><span className="text-[10px] text-slate-400">Odometer Reading:</span><span className="font-bold mt-0.5">{selectedJob.kms.toLocaleString()} KMS</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] text-slate-400">Vehicle Category:</span><span className="font-bold mt-0.5">Scooter Premium</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] text-slate-400">Service Advisor:</span><span className="font-bold mt-0.5 text-indigo-600 dark:text-indigo-400">{selectedJob.advisor}</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] text-slate-400">Primary Tech:</span><span className="font-bold mt-0.5 text-green-600 dark:text-green-400">{selectedJob.technician}</span></div>
-                        </div>
+                        {isEditingSidePanel && editedJob ? (
+                          <div className="grid grid-cols-2 gap-3 text-xs">
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-[10px] text-slate-400">Odometer Reading:</span>
+                              <input
+                                type="number"
+                                value={editedJob.kms}
+                                onChange={(e) => setEditedJob({ ...editedJob, kms: parseInt(e.target.value) || 0 })}
+                                className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                              />
+                            </div>
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-[10px] text-slate-400">Vehicle Category:</span>
+                              <span className="font-bold py-1">Scooter Premium</span>
+                            </div>
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-[10px] text-slate-400">Service Advisor:</span>
+                              <select
+                                value={editedJob.advisor}
+                                onChange={(e) => setEditedJob({ ...editedJob, advisor: e.target.value })}
+                                className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-indigo-600 dark:text-indigo-400"
+                              >
+                                {supervisorsList.map((s, i) => <option key={i} value={s}>{s}</option>)}
+                              </select>
+                            </div>
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-[10px] text-slate-400">Primary Tech:</span>
+                              <select
+                                value={editedJob.technician}
+                                onChange={(e) => setEditedJob({ ...editedJob, technician: e.target.value })}
+                                className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-green-600 dark:text-green-400"
+                              >
+                                {techniciansList.map((t, i) => <option key={i} value={t}>{t}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-3 text-xs">
+                            <div className="flex flex-col"><span className="text-[10px] text-slate-400">Odometer Reading:</span><span className="font-bold mt-0.5">{selectedJob.kms.toLocaleString()} KMS</span></div>
+                            <div className="flex flex-col"><span className="text-[10px] text-slate-400">Vehicle Category:</span><span className="font-bold mt-0.5">Scooter Premium</span></div>
+                            <div className="flex flex-col"><span className="text-[10px] text-slate-400">Service Advisor:</span><span className="font-bold mt-0.5 text-indigo-600 dark:text-indigo-400">{selectedJob.advisor}</span></div>
+                            <div className="flex flex-col"><span className="text-[10px] text-slate-400">Primary Tech:</span><span className="font-bold mt-0.5 text-green-600 dark:text-green-400">{selectedJob.technician}</span></div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Budget summary */}

@@ -36,20 +36,23 @@ The project follows a monorepo structure:
     ```bash
     npm install
     ```
-2.  **Start infrastructure:**
+2.  **Start infrastructure (Redis only):**
+    Ensure your local MySQL service is running. You can still use Docker for Redis:
     ```bash
-    docker-compose up -d
+    docker-compose up -d redis
     ```
-3.  **Initialize the database:**
-    Execute the SQL scripts in order:
+3.  **Initialize the database (Local MySQL):**
+    Ensure you have created the `bikemaster` database and user in your local MySQL. Use the provided credentials in `apps/api/src/app.module.ts`.
+    Execute the SQL scripts using your local MySQL client:
     ```bash
-    psql -h localhost -U postgres -d bikemaster -f db/schema/ddl_create.sql
-    psql -h localhost -U postgres -d bikemaster -f db/dml/seed_data.sql
-    psql -h localhost -U postgres -d bikemaster -f db/dcl/permissions.sql
+    mysql -u admin -p bikemaster < db/schema/ddl_create.sql
+    mysql -u admin -p bikemaster < db/dml/seed_data.sql
     ```
 4.  **Configure environment variables:**
-    - `apps/api/.env`: See `apps/api/.env.example`.
+    - `apps/api/.env`: Set `DATABASE_URL` to your local MySQL connection string.
     - `apps/web/.env.local`: Set `NEXT_PUBLIC_API_URL=http://localhost:4000`.
+
+**Note:** This project is configured to use a local MySQL installation by default. Do not use the `mysql` service in `docker-compose.yml` unless specifically requested.
 
 ### Running the Project
 
