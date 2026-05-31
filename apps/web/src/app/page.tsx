@@ -4569,13 +4569,14 @@ export default function Home() {
                         {(() => {
                           const isExpanded = expandedCardId === job.id;
                           const currentRating = jobRatings[job.id] ?? (job as any).rating ?? 0;
+                          const notReady = !job.isEstimated || job.estimate === 0;
                           const actions = [
                             { icon: FileText, label: "JC/Est" },
-                            { icon: ThumbsUp, label: "Status", disabled: !job.isEstimated },
+                            { icon: ThumbsUp, label: "Status", disabled: notReady },
                             { icon: RefreshCw, label: "History" },
-                            { icon: DollarSign, label: "Payments", disabled: !job.isEstimated },
-                            { icon: Percent, label: "Discount", disabled: !job.isEstimated },
-                            { icon: Printer, label: "Invoice", disabled: !job.isEstimated || job.due > 0 },
+                            { icon: DollarSign, label: "Payments", disabled: notReady },
+                            { icon: Percent, label: "Discount", disabled: notReady },
+                            { icon: Printer, label: "Invoice", disabled: notReady || job.due > 0 },
                             { icon: isExpanded ? ChevronUp : MoreHorizontal, label: isExpanded ? "View Less" : "View More", isMore: true },
                           ];
                           const infoFields = (
