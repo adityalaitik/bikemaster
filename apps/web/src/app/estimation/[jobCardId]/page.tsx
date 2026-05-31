@@ -739,7 +739,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
           <div className="h-16 px-6 flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <button
-                onClick={() => router.push("/")}
+                onClick={() => router.push("/?tab=Service+Queue")}
                 className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 transition-colors flex items-center justify-center"
               >
                 <ArrowLeft className="h-4.5 w-4.5" />

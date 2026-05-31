@@ -31,6 +31,7 @@ export interface JobCard {
   urgency: string; estimate: number; paid: number; due: number; serviceType: string;
   date: string; complaints: Complaint[]; spares: SpareItem[]; services: ServiceItem[];
   timeline: TimelineEntry[]; isEstimated?: boolean; isStatusFilled?: boolean; overallDiscount?: number; rating?: number;
+  paymentBreakdown?: { card: number; cash: number; cheque: number; other: number; remarks: string } | null;
 }
 
 export interface VehicleBrand { id: string; name: string; }
@@ -502,6 +503,8 @@ export class AppService {
     if (data.overallDiscount !== undefined) entity.overallDiscount = data.overallDiscount;
     if (data.completion !== undefined) entity.completion = data.completion;
     if (data.status) entity.status = STATUS_TO_DB[data.status] || data.status;
+    if ((data as any).paid !== undefined) entity.paidAmount = (data as any).paid;
+    if ((data as any).paymentBreakdown !== undefined) entity.paymentBreakdown = (data as any).paymentBreakdown;
 
     if (data.advisor) {
       const emp = await this.employeeRepo.findOneBy({ name: data.advisor, isActive: true });
@@ -548,8 +551,8 @@ export class AppService {
     const serviceTotal = dbServices.reduce((sum, s) => sum + Number(s.rate), 0);
     const estimate = spareTotal + serviceTotal;
     const discount = Number(entity.overallDiscount) || 0;
-    const paid = 0;
-    const due = Math.max(0, estimate - discount);
+    const paid = Number(entity.paidAmount) || 0;
+    const due = Math.max(0, estimate - discount - paid);
 
     const createdAt = entity.createdAt ? new Date(entity.createdAt).toISOString() : new Date().toISOString();
     const updatedAt = entity.updatedAt ? new Date(entity.updatedAt).toISOString() : createdAt;
@@ -600,6 +603,7 @@ export class AppService {
       isStatusFilled: entity.isStatusFilled,
       overallDiscount: discount,
       rating: entity.rating ?? null,
+      paymentBreakdown: entity.paymentBreakdown ?? null,
     };
   }
 

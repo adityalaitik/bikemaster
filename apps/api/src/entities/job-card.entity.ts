@@ -86,6 +86,12 @@ export class JobCardEntity {
   @Column({ name: 'rating_feedback', type: 'text', nullable: true })
   ratingFeedback: string;
 
+  @Column({ name: 'paid_amount', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  paidAmount: number;
+
+  @Column({ name: 'payment_breakdown', type: 'json', nullable: true })
+  paymentBreakdown: { card: number; cash: number; cheque: number; other: number; remarks: string } | null;
+
   @Column({ name: 'is_deleted', default: false })
   isDeleted: boolean;
 

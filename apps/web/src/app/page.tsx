@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Shield,
   Bike,
@@ -376,7 +376,8 @@ export default function Home() {
     }
   }, [theme, mounted]);
 
-  const [activeTab, setActiveTab] = useState("Dashboard");
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") || "Dashboard");
   const [activeFilter, setActiveFilter] = useState("All Jobs");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedJob, setSelectedJob] = useState<JobCard | null>(null);
@@ -1315,6 +1316,12 @@ export default function Home() {
       setSelectedJob(job);
       setIsDiscountModalOpen(true);
       return;
+    } else if (action === "Invoice") {
+      setSelectedJob(job);
+      setIsInvoiceModalOpen(true);
+      fetch(`${API_BASE_URL}/job-cards/${job.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completion: 95 }) }).then(r => r.ok && r.json()).then(u => u && setJobs(prev => prev.map(j => j.id === u.id ? u : j))).catch(() => setJobs(prev => prev.map(j => j.id === job.id ? { ...j, completion: 95 } : j)));
+      addTimelineEntry(job.id, "Invoice Generated", `Tax invoice prepared for ${job.vehicleNo}`);
+      return;
     }
 
     if (Object.keys(updates).length > 0) {
@@ -1339,6 +1346,7 @@ export default function Home() {
   // State for new feature modals
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     card: 0, cash: 0, cheque: 0, other: 0, remarks: ""
   });
@@ -1346,13 +1354,27 @@ export default function Home() {
     overallType: "amount", overallValue: 0, lineItems: []
   });
 
+  const addTimelineEntry = (jobId: string, title: string, desc: string) => {
+    const entry = { time: new Date().toISOString(), title, desc };
+    const patch = (j: JobCard) => j.id === jobId ? { ...j, timeline: [...(j.timeline || []), entry] } : j;
+    setJobs(prev => prev.map(patch));
+    setSelectedJob(prev => prev && prev.id === jobId ? { ...prev, timeline: [...(prev.timeline || []), entry] } : prev);
+  };
+
   const handleSavePayment = async () => {
     if (!selectedJob) return;
     const totalPaid = Number(paymentForm.card) + Number(paymentForm.cash) + Number(paymentForm.cheque) + Number(paymentForm.other);
     const updates = {
       paid: selectedJob.paid + totalPaid,
       due: Math.max(0, selectedJob.estimate - (selectedJob.paid + totalPaid)),
-      completion: 50
+      completion: 50,
+      paymentBreakdown: {
+        card: ((selectedJob as any).paymentBreakdown?.card || 0) + Number(paymentForm.card),
+        cash: ((selectedJob as any).paymentBreakdown?.cash || 0) + Number(paymentForm.cash),
+        cheque: ((selectedJob as any).paymentBreakdown?.cheque || 0) + Number(paymentForm.cheque),
+        other: ((selectedJob as any).paymentBreakdown?.other || 0) + Number(paymentForm.other),
+        remarks: paymentForm.remarks,
+      },
     };
 
     try {
@@ -1364,11 +1386,13 @@ export default function Home() {
       if (res.ok) {
         const updated = await res.json();
         setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
+        addTimelineEntry(selectedJob.id, "Advance Payment Done", `₹${totalPaid} received via ${[paymentForm.card > 0 && 'Card', paymentForm.cash > 0 && 'Cash', paymentForm.cheque > 0 && 'Cheque', paymentForm.other > 0 && 'Other'].filter(Boolean).join(', ') || 'Payment'}`);
         setIsPaymentModalOpen(false);
         triggerToast("Payment recorded successfully!", "success");
       }
     } catch (err) {
       setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, ...updates } : j));
+      addTimelineEntry(selectedJob.id, "Advance Payment Done", `₹${totalPaid} received`);
       setIsPaymentModalOpen(false);
       triggerToast("Payment recorded (Local Fallback)", "success");
     }
@@ -1390,11 +1414,13 @@ export default function Home() {
       if (res.ok) {
         const updated = await res.json();
         setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
+        addTimelineEntry(selectedJob.id, "Discount Applied", `₹${discountForm.overallValue} discount granted on the job card`);
         setIsDiscountModalOpen(false);
         triggerToast("Discount applied successfully!", "success");
       }
     } catch (err) {
       setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, ...updates } : j));
+      addTimelineEntry(selectedJob.id, "Discount Applied", `₹${discountForm.overallValue} discount granted on the job card`);
       setIsDiscountModalOpen(false);
       triggerToast("Discount applied (Local Fallback)", "success");
     }
@@ -4549,7 +4575,7 @@ export default function Home() {
                             { icon: RefreshCw, label: "History" },
                             { icon: DollarSign, label: "Payments" },
                             { icon: Percent, label: "Discount" },
-                            { icon: Printer, label: "Invoice" },
+                            { icon: Printer, label: "Invoice", disabled: job.due > 0 },
                             { icon: isExpanded ? ChevronUp : MoreHorizontal, label: isExpanded ? "View Less" : "View More", isMore: true },
                           ];
                           const infoFields = (
@@ -4613,10 +4639,12 @@ export default function Home() {
                             <button
                               key={i}
                               type="button"
-                              className="flex flex-col items-center space-y-1 cursor-pointer group/btn focus:outline-none shrink-0"
+                              disabled={(action as any).disabled}
+                              className={`flex flex-col items-center space-y-1 focus:outline-none shrink-0 ${(action as any).disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer group/btn'}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 e.preventDefault();
+                                if ((action as any).disabled) return;
                                 if (action.label === "View More") {
                                   setExpandedCardId(job.id);
                                   setSelectedJob(job);
@@ -4629,7 +4657,7 @@ export default function Home() {
                                 }
                               }}
                             >
-                              <div className={`p-2 rounded-full shadow-sm transition-all group-hover/btn:scale-110 ${
+                              <div className={`p-2 rounded-full shadow-sm transition-all ${(action as any).disabled ? '' : 'group-hover/btn:scale-110'} ${
                                 action.isMore ? 'bg-teal-500 text-white' :
                                 'bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white border border-slate-100 dark:border-slate-700'
                               }`}>
@@ -4989,7 +5017,14 @@ export default function Home() {
                           <span>Estimate</span>
                         </button>
                         <button
-                          onClick={() => triggerToast(`Gate Pass issued for ${selectedJob.vehicleNo}!`, "success")}
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completion: 100 }) });
+                              if (res.ok) { const u = await res.json(); setJobs(prev => prev.map(j => j.id === u.id ? u : j)); setSelectedJob(u); }
+                            } catch { setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, completion: 100 } : j)); }
+                            addTimelineEntry(selectedJob.id, "Gate Pass Issued 🎉", `Vehicle ${selectedJob.vehicleNo} is cleared and ready to roll — safe travels!`);
+                            triggerToast(`Gate Pass issued for ${selectedJob.vehicleNo}!`, "success");
+                          }}
                           className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 hover:text-slate-800 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs transition-colors"
                         >
                           <FileText className="h-4 w-4" />
@@ -4998,9 +5033,11 @@ export default function Home() {
                         <button
                           onClick={async () => {
                             try {
-                              const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "Completed" }) });
-                              if (res.ok) { const u = await res.json(); setJobs(prev => prev.map(j => j.id === u.id ? u : j)); setSelectedJob(u); triggerToast("Job completed!", "success"); }
-                            } catch { setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, status: "Completed", completion: 100 } : j)); triggerToast("Marked complete", "success"); }
+                              const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "Completed", completion: 90 }) });
+                              if (res.ok) { const u = await res.json(); setJobs(prev => prev.map(j => j.id === u.id ? u : j)); setSelectedJob(u); }
+                              addTimelineEntry(selectedJob.id, "Vehicle Ready ✅", `${selectedJob.vehicleNo} — service complete, awaiting customer pickup`);
+                              triggerToast("Job completed!", "success");
+                            } catch { setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, status: "Completed", completion: 90 } : j)); addTimelineEntry(selectedJob.id, "Vehicle Ready ✅", `${selectedJob.vehicleNo} — service complete, awaiting customer pickup`); triggerToast("Marked complete", "success"); }
                           }}
                           className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-xs transition-colors shadow-md"
                         >
@@ -9177,73 +9214,239 @@ export default function Home() {
                   <div className="text-[10px] font-bold text-slate-500 flex items-center justify-center space-x-3 mt-1">
                     <span>Order Id: {selectedJob.id.split('-').pop()}</span>
                     <span>|</span>
-                    <span>Total Amount: Rs. {selectedJob.estimate}</span>
+                    <span>Total Amount (incl. GST): Rs. {Math.round(selectedJob.estimate * 1.18)}</span>
                     <span>|</span>
                     <span>Total Discount: Rs. {selectedJob.overallDiscount || 0}</span>
                     <span>|</span>
                     <span>Total Paid: Rs. {selectedJob.paid}</span>
                     <span>|</span>
-                    <span>Total Due: Rs. {selectedJob.due}</span>
+                    <span>Total Due: Rs. {Math.max(0, Math.round(selectedJob.estimate * 1.18) - selectedJob.paid)}</span>
                   </div>
                 </div>
                 <button onClick={() => setIsPaymentModalOpen(false)} className="text-red-500 hover:scale-110 transition-transform"><X className="h-5 w-5" /></button>
               </div>
 
-              <div className="p-6 space-y-6">
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between p-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-lg">
-                    <span className="text-xs font-black text-slate-700 dark:text-slate-300">To Be Paid By Customer :</span>
-                    <span className="text-xs font-black text-slate-800 dark:text-white">Rs. {selectedJob.due}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg">
-                    <span className="text-xs font-black text-slate-700 dark:text-slate-300">Total Paid By Customer :</span>
-                    <span className="text-xs font-black text-slate-800 dark:text-white">Rs. {selectedJob.paid}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-lg">
-                    <span className="text-xs font-black text-slate-700 dark:text-slate-300">Total Due From Customer :</span>
-                    <span className="text-xs font-black text-slate-800 dark:text-white">Rs. {selectedJob.due}</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  {['Card', 'Cash', 'Cheque', 'Other'].map((mode) => (
-                    <React.Fragment key={mode}>
-                      <div className="flex items-center bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-xl px-4 py-2">
-                        <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">Paid By {mode}</span>
+              {(() => {
+                const gstRate = 0.18;
+                const baseAmount = selectedJob.estimate;
+                const gstAmount = Math.round(baseAmount * gstRate);
+                const totalWithGst = baseAmount + gstAmount;
+                const enteredPaid = Number(paymentForm.card) + Number(paymentForm.cash) + Number(paymentForm.cheque) + Number(paymentForm.other);
+                const totalPaidSoFar = selectedJob.paid + enteredPaid;
+                const totalDue = Math.max(0, totalWithGst - totalPaidSoFar);
+                return (
+                  <div className="p-6 space-y-6">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between p-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-lg">
+                        <span className="text-xs font-black text-slate-700 dark:text-slate-300">To Be Paid By Customer (incl. GST {(gstRate*100).toFixed(0)}%) :</span>
+                        <span className="text-xs font-black text-slate-800 dark:text-white">Rs. {totalWithGst}</span>
                       </div>
-                      <input 
-                        type="number" 
-                        placeholder="Enter amount" 
-                        className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold focus:outline-none focus:ring-1 focus:ring-teal-500"
-                        onChange={(e) => setPaymentForm({ ...paymentForm, [mode.toLowerCase()]: e.target.value })}
-                      />
-                      <input 
-                        type="text" 
-                        placeholder="Enter remarks" 
-                        className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold focus:outline-none focus:ring-1 focus:ring-teal-500"
-                        onChange={(e) => setPaymentForm({ ...paymentForm, remarks: e.target.value })}
-                      />
-                    </React.Fragment>
-                  ))}
-                </div>
-              </div>
+                      <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg">
+                        <span className="text-xs font-black text-slate-700 dark:text-slate-300">Total Paid By Customer :</span>
+                        <span className="text-xs font-black text-teal-600 dark:text-teal-400">Rs. {totalPaidSoFar}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-lg">
+                        <span className="text-xs font-black text-slate-700 dark:text-slate-300">Total Due From Customer :</span>
+                        <span className={`text-xs font-black ${totalDue > 0 ? 'text-red-500' : 'text-green-600'}`}>Rs. {totalDue}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4">
+                      {['Card', 'Cash', 'Cheque', 'Other'].map((mode) => (
+                        <React.Fragment key={mode}>
+                          <div className="flex items-center bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-xl px-4 py-2">
+                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">Paid By {mode}</span>
+                          </div>
+                          <input
+                            type="number"
+                            placeholder="Enter amount"
+                            className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold focus:outline-none focus:ring-1 focus:ring-teal-500"
+                            onChange={(e) => setPaymentForm(prev => ({ ...prev, [mode.toLowerCase()]: Number(e.target.value) || 0 }))}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Enter remarks"
+                            className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold focus:outline-none focus:ring-1 focus:ring-teal-500"
+                            onChange={(e) => setPaymentForm(prev => ({ ...prev, remarks: e.target.value }))}
+                          />
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center">
                 <button className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase">Terms and Conditions</button>
                 <div className="flex space-x-3">
-                  <button 
+                  <button
                     onClick={handleSavePayment}
                     className="px-8 py-2 bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 rounded-xl font-black text-xs hover:bg-green-200 transition-all"
                   >
-                    Edit
+                    Save
                   </button>
-                  <button 
-                    onClick={() => setIsPaymentModalOpen(false)}
+                  <button
+                    onClick={handleSavePayment}
                     className="px-8 py-2 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-xl font-black text-xs hover:bg-red-200 transition-all"
                   >
                     Close
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* INVOICE PREVIEW MODAL */}
+        {/* ============================================================ */}
+        {isInvoiceModalOpen && selectedJob && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-3xl overflow-hidden animate-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex-1 text-center">
+                  <h3 className="font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Tax Invoice Preview</h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">JC: {selectedJob.id} | {selectedJob.vehicleNo} | {selectedJob.brandModel}</p>
+                </div>
+                <button onClick={() => setIsInvoiceModalOpen(false)} className="text-red-500 hover:scale-110 transition-transform"><X className="h-5 w-5" /></button>
+              </div>
+
+              {(() => {
+                const subtotal = selectedJob.estimate;
+                const cgst = Math.round(subtotal * 0.09);
+                const sgst = Math.round(subtotal * 0.09);
+                const gstTotal = cgst + sgst;
+                const discount = Number(selectedJob.overallDiscount) || 0;
+                const netPayable = Math.max(0, subtotal + gstTotal - discount);
+                const totalPaid = selectedJob.paid || 0;
+                const due = Math.max(0, netPayable - totalPaid);
+                return (
+                  <div className="p-6 space-y-5 overflow-y-auto max-h-[70vh] text-xs text-slate-900 dark:text-slate-100">
+
+                    {/* Workshop Header */}
+                    <div className="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-4">
+                      <div>
+                        <h4 className="font-extrabold text-sm uppercase text-slate-900 dark:text-white">BIKE MASTERS</h4>
+                        <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">Plot No. 120, Near Fire Station, Bhubaneswar, Odisha - 751001<br />Phone: +91 91212 23601 | GSTIN: 21AAAAA0000A1Z0</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-extrabold text-sm block tracking-widest uppercase">TAX INVOICE</span>
+                        <p className="text-[10px] text-slate-500 font-mono mt-1">JC: <strong>{selectedJob.id}</strong></p>
+                        <p className="text-[10px] text-slate-500">Date: {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                      </div>
+                    </div>
+
+                    {/* Customer & Vehicle */}
+                    <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <div className="space-y-0.5">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">Customer Details</span>
+                        <p className="font-extrabold">{selectedJob.customerName}</p>
+                        <p className="text-slate-500">{selectedJob.phone}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">Vehicle Details</span>
+                        <p className="font-extrabold font-mono">{selectedJob.vehicleNo}</p>
+                        <p className="text-slate-500">{selectedJob.brandModel} | {selectedJob.kms.toLocaleString()} KM</p>
+                      </div>
+                    </div>
+
+                    {/* Spares Table */}
+                    {selectedJob.spares.length > 0 && (
+                      <div>
+                        <h5 className="font-extrabold text-[10px] text-slate-600 dark:text-slate-400 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1 mb-2">Spare Parts</h5>
+                        <table className="w-full text-left border-collapse text-[11px]">
+                          <thead>
+                            <tr className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
+                              <th className="py-1.5 px-2">S.No</th><th className="py-1.5 px-2">Description</th><th className="py-1.5 px-2">HSN</th><th className="py-1.5 px-2 text-center">Qty</th><th className="py-1.5 px-2 text-right">Rate</th><th className="py-1.5 px-2 text-right">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedJob.spares.map((s, i) => (
+                              <tr key={i} className="border-b border-slate-100 dark:border-slate-800">
+                                <td className="py-1.5 px-2">{i + 1}</td>
+                                <td className="py-1.5 px-2 font-semibold">{s.name}</td>
+                                <td className="py-1.5 px-2 font-mono text-[10px] text-slate-500">{s.hsn}</td>
+                                <td className="py-1.5 px-2 text-center">{s.qty}</td>
+                                <td className="py-1.5 px-2 text-right">₹{s.price}</td>
+                                <td className="py-1.5 px-2 text-right font-bold">₹{s.qty * s.price}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Services Table */}
+                    {selectedJob.services.length > 0 && (
+                      <div>
+                        <h5 className="font-extrabold text-[10px] text-slate-600 dark:text-slate-400 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1 mb-2">Services / Labour</h5>
+                        <table className="w-full text-left border-collapse text-[11px]">
+                          <thead>
+                            <tr className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
+                              <th className="py-1.5 px-2">S.No</th><th className="py-1.5 px-2">Description</th><th className="py-1.5 px-2">SAC</th><th className="py-1.5 px-2 text-right">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedJob.services.map((s, i) => (
+                              <tr key={i} className="border-b border-slate-100 dark:border-slate-800">
+                                <td className="py-1.5 px-2">{i + 1}</td>
+                                <td className="py-1.5 px-2 font-semibold">{s.name}</td>
+                                <td className="py-1.5 px-2 font-mono text-[10px] text-slate-500">{s.hsn}</td>
+                                <td className="py-1.5 px-2 text-right font-bold">₹{s.rate}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Totals + Payment side by side */}
+                    <div className="grid grid-cols-2 gap-6 pt-2 border-t border-slate-200 dark:border-slate-700">
+                      {/* Tax Breakdown */}
+                      <div className="space-y-1.5 text-[11px] max-w-xs ml-auto w-full">
+                        <div className="flex justify-between text-slate-500"><span>Subtotal:</span><span className="font-bold text-slate-800 dark:text-slate-200">₹{subtotal}</span></div>
+                        <div className="flex justify-between text-slate-500"><span>CGST (9.0%):</span><span className="font-bold text-slate-800 dark:text-slate-200">₹{cgst}</span></div>
+                        <div className="flex justify-between text-slate-500"><span>SGST (9.0%):</span><span className="font-bold text-slate-800 dark:text-slate-200">₹{sgst}</span></div>
+                        {discount > 0 && <div className="flex justify-between text-red-500"><span>Discount:</span><span className="font-bold">− ₹{discount}</span></div>}
+                        <div className="flex justify-between border-t border-slate-300 dark:border-slate-600 pt-1.5 font-black text-sm">
+                          <span>Net Payable:</span><span className="text-teal-600 dark:text-teal-400">₹{netPayable}</span>
+                        </div>
+                      </div>
+
+                      {/* Payment Received */}
+                      <div className="space-y-1.5 text-[11px]">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Payment Received</span>
+                        {[
+                          { label: 'By Card', value: (selectedJob as any).paymentBreakdown?.card },
+                          { label: 'By Cash', value: (selectedJob as any).paymentBreakdown?.cash },
+                          { label: 'By Cheque', value: (selectedJob as any).paymentBreakdown?.cheque },
+                          { label: 'By Other', value: (selectedJob as any).paymentBreakdown?.other },
+                        ].filter(p => Number(p.value) > 0).map((p, i) => (
+                          <div key={i} className="flex justify-between text-slate-500"><span>{p.label}:</span><span className="font-bold text-teal-600">₹{p.value}</span></div>
+                        ))}
+                        {totalPaid === 0 && <p className="text-slate-400 italic text-[10px]">No payment recorded yet</p>}
+                        <div className="flex justify-between border-t border-slate-300 dark:border-slate-600 pt-1.5 font-black">
+                          <span>Total Paid:</span><span className="text-teal-600">₹{totalPaid}</span>
+                        </div>
+                        {/* Balance Due — display only, not clickable */}
+                        <div className="flex justify-between pt-1 font-black select-none pointer-events-none">
+                          <span>Balance Due:</span>
+                          <span className={due > 0 ? 'text-red-500' : 'text-green-600'}>₹{due}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-end space-x-3">
+                <button onClick={() => window.print()} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs transition-all flex items-center space-x-1.5">
+                  <Printer className="h-3.5 w-3.5" /><span>Print</span>
+                </button>
+                <button onClick={() => setIsInvoiceModalOpen(false)} className="px-6 py-2 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-xl font-black text-xs hover:bg-red-200 transition-all">
+                  Close
+                </button>
               </div>
             </div>
           </div>
