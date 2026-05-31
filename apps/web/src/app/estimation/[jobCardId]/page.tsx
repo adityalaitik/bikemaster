@@ -221,12 +221,45 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
     }, 3000);
   };
 
+  const getAuthHeaders = (): Record<string, string> => {
+    try {
+      const session = localStorage.getItem("bikemaster_session");
+      if (session) {
+        const { token } = JSON.parse(session);
+        if (token && token !== "offline-token") return { Authorization: `Bearer ${token}` };
+      }
+    } catch { /* ignore */ }
+    return {};
+  };
+
+  const loadFallbackJob = () => {
+    const fallbackComplaints = [
+      { text: "Engine making heavy noise on acceleration", finding: "Loose timing chain and worn out tensioner guide", action: "repair_now" },
+      { text: "Front brake response very poor", finding: "Brake shoes carbonized and worn", action: "replace_now" },
+      { text: "Slight rust on crash guard structure", finding: "Surface oxidation observed", action: "observe" },
+      { text: "Spark plug gap adjustment", finding: "Normal soot deposits, adjusted gap", action: "declined" }
+    ];
+    setJob({
+      id: jobCardId, vehicleNo: "OD-05-AB-1234", brandModel: "Honda Activa 6G",
+      customerName: "Aditya Pradhan", phone: "+91 98765 43210", kms: 12450,
+      completion: 75, status: "Under Servicing", advisor: "Subhashis Sen",
+      technician: "Manoj Kumar", urgency: "High", estimate: 1450, paid: 0, due: 1450,
+      serviceType: "Regular", date: "29 May 2026", complaints: fallbackComplaints, spares: [], services: [], timeline: []
+    });
+    setAllocatedComplaints(fallbackComplaints);
+    setRejectedItems([{ type: "complaint", name: "Spark plug gap adjustment", reason: "Declined: Customer wants to do it next service" }]);
+  };
+
   // Load core details on mount
   useEffect(() => {
     const loadData = async () => {
       try {
-        // 1. Load active Job Card
-        const jobRes = await fetch(`${API_BASE_URL}/job-cards/${jobCardId}`);
+        // Fire job card fetch and catalog fetch in parallel
+        const [jobRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/job-cards/${jobCardId}`, { headers: getAuthHeaders() }),
+          fetchCatalog(""),
+        ]);
+
         if (jobRes.ok) {
           const jobData = await jobRes.json();
           setJob(jobData);
@@ -235,48 +268,13 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
           setAllocatedComplaints(jobData.complaints || []);
           setRejectedItems((jobData.complaints || []).filter((c: Complaint) => c.action === "declined").map((c: Complaint) => ({ type: "complaint", name: c.text, reason: c.finding || "Declined by customer" })));
         } else {
-          triggerToast("Failed to retrieve Job Card details", "warn");
+          // 401, 404 or any non-ok — load offline mock so the page is usable
+          triggerToast("Using offline data — job card not found in DB", "warn");
+          loadFallbackJob();
         }
-
-        // 2. Load initial catalog products
-        fetchCatalog("");
       } catch (err) {
         console.error("Backend offline. Simulating estimation data.", err);
-        // Fallback simulated local load
-        const fallbackComplaints = [
-          { text: "Engine making heavy noise on acceleration", finding: "Loose timing chain and worn out tensioner guide", action: "repair_now" },
-          { text: "Front brake response very poor", finding: "Brake shoes carbonized and worn", action: "replace_now" },
-          { text: "Slight rust on crash guard structure", finding: "Surface oxidation observed", action: "observe" },
-          { text: "Spark plug gap adjustment", finding: "Normal soot deposits, adjusted gap", action: "declined" }
-        ];
-        
-        setJob({
-          id: jobCardId,
-          vehicleNo: "OD-05-AB-1234",
-          brandModel: "Honda Activa 6G",
-          customerName: "Aditya Pradhan",
-          phone: "+91 98765 43210",
-          kms: 12450,
-          completion: 75,
-          status: "Under Servicing",
-          advisor: "Subhashis Sen",
-          technician: "Manoj Kumar",
-          urgency: "High",
-          estimate: 1450,
-          paid: 0,
-          due: 1450,
-          serviceType: "Regular",
-          date: "29 May 2026",
-          complaints: fallbackComplaints,
-          spares: [],
-          services: [],
-          timeline: []
-        });
-
-        setAllocatedComplaints(fallbackComplaints);
-        setRejectedItems([
-          { type: "complaint", name: "Spark plug gap adjustment", reason: "Declined: Customer wants to do it next service" }
-        ]);
+        loadFallbackJob();
       }
     };
     loadData();
@@ -285,8 +283,10 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
   // Fetch catalogs dynamically
   const fetchCatalog = async (q: string) => {
     try {
-      const sparesRes = await fetch(`${API_BASE_URL}/spare-parts/search?q=${q}`);
-      const servicesRes = await fetch(`${API_BASE_URL}/services/search?q=${q}`);
+      const [sparesRes, servicesRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/spare-parts/search?q=${q}`, { headers: getAuthHeaders() }),
+        fetch(`${API_BASE_URL}/services/search?q=${q}`, { headers: getAuthHeaders() }),
+      ]);
       
       if (sparesRes.ok && servicesRes.ok) {
         setSparesCatalog(await sparesRes.json());
