@@ -403,11 +403,12 @@ export class AppService {
     const entity = await this.jobCardRepo.findOneBy({ jobCardNo: id });
     if (!entity) throw new NotFoundException(`Job card ${id} not found`);
 
-    const [vehicle, customer, dbSpares, dbServices] = await Promise.all([
+    const [vehicle, customer, dbSpares, dbServices, dbComplaints] = await Promise.all([
       this.vehicleRepo.findOneBy({ id: entity.vehicleId }),
       this.customerRepo.findOneBy({ id: entity.customerId }),
       this.jobSparesRepo.findBy({ jobCardId: entity.jobCardNo }),
       this.jobServicesRepo.findBy({ jobCardId: entity.jobCardNo }),
+      this.complaintRepo.findBy({ jobCardId: entity.id }),
     ]);
 
     let brandModel = 'Bike';
@@ -418,7 +419,7 @@ export class AppService {
         brandModel = `${brand?.name || ''} ${model.name}`.trim();
       }
     }
-    return this.buildJobCardDto(entity, vehicle, customer, brandModel, dbSpares, dbServices);
+    return this.buildJobCardDto(entity, vehicle, customer, brandModel, dbSpares, dbServices, dbComplaints);
   }
 
   // ── Create Job Card ───────────────────────────────────────────────────────
@@ -541,12 +542,29 @@ export class AppService {
     brandModel: string,
     dbSpares: JobSpareItemEntity[],
     dbServices: JobServiceItemEntity[],
+    dbComplaints: JobComplaintEntity[] = [],
   ): JobCard {
     const spareTotal = dbSpares.reduce((sum, s) => sum + Number(s.price) * s.quantity, 0);
     const serviceTotal = dbServices.reduce((sum, s) => sum + Number(s.rate), 0);
     const estimate = spareTotal + serviceTotal;
     const discount = Number(entity.overallDiscount) || 0;
+    const paid = 0;
     const due = Math.max(0, estimate - discount);
+
+    const createdAt = entity.createdAt ? new Date(entity.createdAt).toISOString() : new Date().toISOString();
+    const updatedAt = entity.updatedAt ? new Date(entity.updatedAt).toISOString() : createdAt;
+    const timeline: TimelineEntry[] = [
+      { time: createdAt, title: 'Job Card Created', desc: `Vehicle checked in — ${vehicle?.registrationNo || 'N/A'}` },
+    ];
+    if (entity.isEstimated) {
+      timeline.push({ time: updatedAt, title: 'Estimation Calculated', desc: `Estimate: ₹${estimate.toFixed(2)}` });
+    }
+    if (entity.isStatusFilled) {
+      timeline.push({ time: updatedAt, title: 'Client Agreed with Estimation', desc: 'Status confirmed by advisor' });
+    }
+    if (discount > 0) {
+      timeline.push({ time: updatedAt, title: 'Discount Applied', desc: `Discount: ₹${discount.toFixed(2)}` });
+    }
 
     return {
       id: entity.jobCardNo,
@@ -561,11 +579,13 @@ export class AppService {
       technician: 'Assigned',
       urgency: 'Medium',
       estimate,
-      paid: 0,
+      paid,
       due,
       serviceType: entity.serviceType,
       date: entity.dateOfArrival ? new Date(entity.dateOfArrival).toDateString() : new Date().toDateString(),
-      complaints: this.parseJSON(entity.customerComplaints, []),
+      complaints: dbComplaints.length > 0
+        ? dbComplaints.map(c => ({ text: c.complaintText, finding: c.workshopFinding || '', action: this.dbActionToFrontend(c.action) }))
+        : this.parseJSON(entity.customerComplaints, []),
       spares: dbSpares.map(s => ({
         id: s.id, name: s.partName, qty: s.quantity,
         price: Number(s.price), mrp: Number(s.mrp),
@@ -577,7 +597,7 @@ export class AppService {
         hsn: s.serviceCode, code: s.serviceCode,
         status: s.status, billedTo: s.billedTo as any,
       })),
-      timeline: [],
+      timeline,
       isEstimated: entity.isEstimated,
       isStatusFilled: entity.isStatusFilled,
       overallDiscount: discount,
