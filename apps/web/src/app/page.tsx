@@ -4571,11 +4571,11 @@ export default function Home() {
                           const currentRating = jobRatings[job.id] ?? (job as any).rating ?? 0;
                           const actions = [
                             { icon: FileText, label: "JC/Est" },
-                            { icon: ThumbsUp, label: "Status" },
+                            { icon: ThumbsUp, label: "Status", disabled: !job.isEstimated },
                             { icon: RefreshCw, label: "History" },
-                            { icon: DollarSign, label: "Payments" },
-                            { icon: Percent, label: "Discount" },
-                            { icon: Printer, label: "Invoice", disabled: job.due > 0 },
+                            { icon: DollarSign, label: "Payments", disabled: !job.isEstimated },
+                            { icon: Percent, label: "Discount", disabled: !job.isEstimated },
+                            { icon: Printer, label: "Invoice", disabled: !job.isEstimated || job.due > 0 },
                             { icon: isExpanded ? ChevronUp : MoreHorizontal, label: isExpanded ? "View Less" : "View More", isMore: true },
                           ];
                           const infoFields = (
@@ -5019,7 +5019,7 @@ export default function Home() {
                         <button
                           onClick={async () => {
                             try {
-                              const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completion: 100 }) });
+                              const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completion: 100, actualDeliveryDate: new Date().toISOString() }) });
                               if (res.ok) { const u = await res.json(); setJobs(prev => prev.map(j => j.id === u.id ? u : j)); setSelectedJob(u); }
                             } catch { setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, completion: 100 } : j)); }
                             addTimelineEntry(selectedJob.id, "Gate Pass Issued 🎉", `Vehicle ${selectedJob.vehicleNo} is cleared and ready to roll — safe travels!`);

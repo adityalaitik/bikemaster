@@ -511,6 +511,7 @@ export class AppService {
     if (data.status) entity.status = STATUS_TO_DB[data.status] || data.status;
     if ((data as any).paid !== undefined) entity.paidAmount = (data as any).paid;
     if ((data as any).paymentBreakdown !== undefined) entity.paymentBreakdown = (data as any).paymentBreakdown;
+    if ((data as any).actualDeliveryDate !== undefined) entity.actualDeliveryDate = new Date((data as any).actualDeliveryDate);
 
     if (data.advisor) {
       const emp = await this.employeeRepo.findOneBy({ name: data.advisor, isActive: true });
