@@ -4556,7 +4556,19 @@ export default function Home() {
                             <>
                               <div className="flex flex-col shrink-0">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Customer Name</span>
-                                <span className="text-xs font-black text-slate-800 dark:text-white uppercase leading-none">{job.customerName}</span>
+                                {job.customerName.length > 15 ? (() => {
+                                  const parts = job.customerName.trim().split(' ');
+                                  const lastName = parts[parts.length - 1];
+                                  const firstName = parts.slice(0, -1).join(' ') || lastName;
+                                  return (
+                                    <div className="flex flex-col leading-tight">
+                                      <span className="text-xs font-black text-slate-800 dark:text-white uppercase">{firstName}</span>
+                                      {parts.length > 1 && <span className="text-xs font-black text-slate-800 dark:text-white uppercase">{lastName}</span>}
+                                    </div>
+                                  );
+                                })() : (
+                                  <span className="text-xs font-black text-slate-800 dark:text-white uppercase leading-none">{job.customerName}</span>
+                                )}
                               </div>
                               <div className="flex flex-col shrink-0">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Phone Number</span>
@@ -4593,7 +4605,7 @@ export default function Home() {
                               </div>
                               <div className="flex flex-col shrink-0">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Advisor</span>
-                                <span className="text-xs font-black text-slate-800 dark:text-white leading-none">{job.advisor}</span>
+                                <span className="text-xs font-black text-slate-800 dark:text-white uppercase leading-none">{job.advisor.trim().split(' ')[0]}</span>
                               </div>
                             </>
                           );
@@ -4626,19 +4638,6 @@ export default function Home() {
                               <span className="text-[9px] font-black uppercase tracking-tighter text-slate-500 dark:text-slate-400">{action.label}</span>
                             </button>
                           ));
-                          const progressCircle = (
-                            <div className="relative flex items-center justify-center shrink-0 ml-2">
-                              <svg className="w-12 h-12 transform -rotate-90">
-                                <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
-                                <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
-                                  strokeDasharray={125.7}
-                                  strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
-                                  strokeLinecap="round"
-                                />
-                              </svg>
-                              <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
-                            </div>
-                          );
                           return (
                             <div className="bg-white dark:bg-slate-900 px-6 py-3">
                               {isExpanded ? (
@@ -4649,16 +4648,40 @@ export default function Home() {
                                   </div>
                                   <div className="flex items-center gap-x-5 flex-wrap gap-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
                                     {actionButtons}
-                                    {progressCircle}
+                                    <div className="relative flex items-center justify-center shrink-0 ml-2">
+                                      <svg className="w-12 h-12 transform -rotate-90">
+                                        <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
+                                        <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
+                                          strokeDasharray={125.7}
+                                          strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
+                                          strokeLinecap="round"
+                                        />
+                                      </svg>
+                                      <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
+                                    </div>
                                   </div>
                                 </div>
                               ) : (
-                                /* Collapsed: single row — info + divider + action buttons + progress */
-                                <div className="flex items-center gap-x-6 overflow-x-auto">
-                                  {infoFields}
-                                  <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 shrink-0 mx-1" />
-                                  {actionButtons}
-                                  {progressCircle}
+                                /* Collapsed: single row — left half info | divider | right half actions + progress */
+                                <div className="flex items-center w-full">
+                                  <div className="flex items-center gap-x-6 w-1/2">
+                                    {infoFields}
+                                  </div>
+                                  <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 shrink-0 mx-4" />
+                                  <div className="flex items-center gap-x-5 w-1/2">
+                                    {actionButtons}
+                                    <div className="relative flex items-center justify-center shrink-0 ml-2">
+                                      <svg className="w-12 h-12 transform -rotate-90">
+                                        <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
+                                        <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
+                                          strokeDasharray={125.7}
+                                          strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
+                                          strokeLinecap="round"
+                                        />
+                                      </svg>
+                                      <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
                             </div>
