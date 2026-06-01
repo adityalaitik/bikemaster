@@ -1382,6 +1382,13 @@ export default function Home() {
         return;
       }
       setSelectedJob(job);
+      const spareItems = job.spares.map((s, i) => ({
+        key: `spare-${i}`, name: s.name, total: s.price * s.qty, type: "amount" as const, value: 0, isSpare: true,
+      }));
+      const serviceItems = job.services.map((s, i) => ({
+        key: `svc-${i}`, name: s.name, total: s.rate, type: "amount" as const, value: 0, isSpare: false,
+      }));
+      setDiscountForm({ overallType: "amount", overallValue: job.overallDiscount || 0, lineItems: [...spareItems, ...serviceItems] });
       setIsDiscountModalOpen(true);
       return;
     } else if (action === "History") {
@@ -1436,9 +1443,11 @@ export default function Home() {
   const [paymentForm, setPaymentForm] = useState({
     card: 0, cash: 0, cheque: 0, other: 0, remarks: ""
   });
-  const [discountForm, setDiscountForm] = useState({
-    overallType: "amount", overallValue: 0, lineItems: []
-  });
+  const [discountForm, setDiscountForm] = useState<{
+    overallType: "percentage" | "amount";
+    overallValue: number;
+    lineItems: Array<{ key: string; name: string; total: number; type: "percentage" | "amount"; value: number; isSpare: boolean }>;
+  }>({ overallType: "amount", overallValue: 0, lineItems: [] });
 
   const addTimelineEntry = (jobId: string, title: string, desc: string) => {
     const entry = { time: new Date().toISOString(), title, desc };
@@ -1516,29 +1525,36 @@ export default function Home() {
 
   const handleSaveDiscount = async () => {
     if (!selectedJob) return;
+    const lineTotal = discountForm.lineItems.reduce((sum, item) => {
+      const d = item.type === "percentage" ? (item.total * item.value / 100) : item.value;
+      return sum + Math.min(d, item.total);
+    }, 0);
+    const overallAmt = discountForm.overallType === "percentage"
+      ? (selectedJob.estimate * discountForm.overallValue / 100)
+      : discountForm.overallValue;
+    const totalDiscount = Math.min(Math.round((lineTotal + overallAmt) * 100) / 100, selectedJob.estimate);
     const updates = {
-      overallDiscount: discountForm.overallValue,
-      due: Math.max(0, selectedJob.estimate - selectedJob.paid - discountForm.overallValue)
+      overallDiscount: totalDiscount,
+      due: Math.max(0, selectedJob.estimate - selectedJob.paid - totalDiscount),
     };
-
     try {
       const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates)
+        body: JSON.stringify(updates),
       });
       if (res.ok) {
         const updated = await res.json();
         setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
-        addTimelineEntry(selectedJob.id, "Discount Applied", `₹${discountForm.overallValue} discount granted on the job card`);
+        addTimelineEntry(selectedJob.id, "Discount Applied", `₹${totalDiscount} total discount applied`);
         setIsDiscountModalOpen(false);
         triggerToast("Discount applied successfully!", "success");
-      }
-    } catch (err) {
+      } else throw new Error();
+    } catch {
       setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, ...updates } : j));
-      addTimelineEntry(selectedJob.id, "Discount Applied", `₹${discountForm.overallValue} discount granted on the job card`);
+      addTimelineEntry(selectedJob.id, "Discount Applied", `₹${totalDiscount} total discount applied`);
       setIsDiscountModalOpen(false);
-      triggerToast("Discount applied (Local Fallback)", "success");
+      triggerToast("Discount applied!", "success");
     }
   };
 
@@ -9806,131 +9822,286 @@ export default function Home() {
         )}
 
         {/* ============================================================ */}
-        {/* DISCOUNT AMOUNT MODAL */}
+        {/* DISCOUNT MODAL */}
         {/* ============================================================ */}
-        {isDiscountModalOpen && selectedJob && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-4xl overflow-hidden animate-in zoom-in-95 duration-200">
-              <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
-                <div className="flex-1 text-center">
-                  <h3 className="font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Add Discount Amount</h3>
-                  <div className="text-[10px] font-bold text-slate-500 flex items-center justify-center space-x-3 mt-1">
-                    <span className="text-green-600">Billed Amount: {selectedJob.estimate}</span>
-                    <span className="text-red-500">| Overall Discount (Calculated after taxes)</span>
-                    <span>| Previous Entered Overall Discount: 0.00</span>
-                  </div>
-                </div>
-                <button onClick={() => setIsDiscountModalOpen(false)} className="text-red-500 hover:scale-110 transition-transform"><X className="h-5 w-5" /></button>
-              </div>
+        {isDiscountModalOpen && selectedJob && (() => {
+          // Live calculations
+          const lineItemDiscountTotal = discountForm.lineItems.reduce((sum, item) => {
+            const d = item.type === "percentage" ? (item.total * item.value / 100) : item.value;
+            return sum + Math.min(Math.max(d, 0), item.total);
+          }, 0);
+          const overallDiscountAmt = discountForm.overallType === "percentage"
+            ? (selectedJob.estimate * discountForm.overallValue / 100)
+            : discountForm.overallValue;
+          const totalDiscount = Math.min(lineItemDiscountTotal + overallDiscountAmt, selectedJob.estimate);
+          const netPayable = Math.max(selectedJob.estimate - totalDiscount, 0);
+          const alreadyPaid = selectedJob.paid || 0;
+          const balanceDue = Math.max(netPayable - alreadyPaid, 0);
+          const gstAmt = Math.round(selectedJob.estimate * 0.18 / 1.18 * 100) / 100;
+          const subtotalBeforeTax = Math.round((selectedJob.estimate - gstAmt) * 100) / 100;
 
-              <div className="p-6 space-y-6">
-                <div className="grid grid-cols-5 gap-4 items-end">
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase">Customer Id</label>
-                    <input type="text" readOnly value={selectedJob.id.split('-').pop()} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold outline-none" />
+          const updateLineItem = (key: string, field: "type" | "value", val: string | number) => {
+            setDiscountForm(prev => ({
+              ...prev,
+              lineItems: prev.lineItems.map(item =>
+                item.key === key ? { ...item, [field]: val } : item
+              ),
+            }));
+          };
+
+          return (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-5xl overflow-hidden flex flex-col max-h-[92vh]">
+
+                {/* Header */}
+                <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between shrink-0">
+                  <div>
+                    <h3 className="font-black text-slate-800 dark:text-white text-sm tracking-wide">Discount Manager</h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{selectedJob.id} · {selectedJob.vehicleNo} · {selectedJob.customerName}</p>
                   </div>
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase">Type</label>
-                    <select className="px-3 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none">
-                      <option>Select Type</option>
-                      <option>Percentage</option>
-                      <option>Amount</option>
-                    </select>
-                  </div>
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase">Value</label>
-                    <input 
-                      type="number" 
-                      placeholder="0.00" 
-                      className="px-3 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none" 
-                      onChange={(e) => setDiscountForm({ ...discountForm, overallValue: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase">Discount.</label>
-                    <input type="number" readOnly value={discountForm.overallValue} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold outline-none" />
-                  </div>
-                  <button 
-                    onClick={handleSaveDiscount}
-                    className="px-3 py-2 bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 rounded-xl font-black text-xs hover:bg-green-200 transition-all h-[38px]"
-                  >
-                    Save
+                  <button onClick={() => setIsDiscountModalOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
 
-                <div className="text-center">
-                  <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Line Item Discount (Calculated before taxes)</span>
-                </div>
+                <div className="flex flex-1 overflow-hidden min-h-0">
+                  {/* LEFT — inputs */}
+                  <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
-                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-teal-500 text-white font-black uppercase tracking-wider text-[10px]">
-                        <th className="py-3 px-4">Parts Name</th>
-                        <th className="py-3 px-4">Total Amount</th>
-                        <th className="py-3 px-4">Taxable Amount</th>
-                        <th className="py-3 px-4">Type</th>
-                        <th className="py-3 px-4">Value</th>
-                        <th className="py-3 px-4">Discount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-bold">
-                      <tr className="bg-slate-50 dark:bg-slate-800/30">
-                        <td colSpan={6} className="py-2 px-4 text-red-500 text-[10px] uppercase font-black">Parts & Consumables</td>
-                      </tr>
-                      {selectedJob.spares.map((spare, i) => (
-                        <tr key={i}>
-                          <td className="py-3 px-4">{spare.name}</td>
-                          <td className="py-3 px-4">{spare.price * spare.qty}</td>
-                          <td className="py-3 px-4">{(spare.price * spare.qty / 1.18).toFixed(2)}</td>
-                          <td className="py-3 px-4">
-                            <select className="px-2 py-1 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-[10px] outline-none">
-                              <option>Select Type</option>
-                            </select>
-                          </td>
-                          <td className="py-3 px-4"><input type="number" placeholder="0.00" className="w-16 px-2 py-1 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-[10px] outline-none" /></td>
-                          <td className="py-3 px-4">0</td>
-                        </tr>
-                      ))}
-                      <tr className="bg-slate-50 dark:bg-slate-800/30">
-                        <td colSpan={6} className="py-2 px-4 text-red-500 text-[10px] uppercase font-black">Services</td>
-                      </tr>
-                      {selectedJob.services.map((svc, i) => (
-                        <tr key={i}>
-                          <td className="py-3 px-4">{svc.name}</td>
-                          <td className="py-3 px-4">{svc.rate}</td>
-                          <td className="py-3 px-4">{(svc.rate / 1.18).toFixed(2)}</td>
-                          <td className="py-3 px-4">
-                            <select className="px-2 py-1 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-[10px] outline-none">
-                              <option>Select Type</option>
-                            </select>
-                          </td>
-                          <td className="py-3 px-4"><input type="number" placeholder="0.00" className="w-16 px-2 py-1 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-[10px] outline-none" /></td>
-                          <td className="py-3 px-4">0</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                    {/* Overall Discount Card */}
+                    <div className="rounded-xl border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/20 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h4 className="text-xs font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-widest">Overall Discount</h4>
+                          <p className="text-[10px] text-slate-400 mt-0.5">Applied on the total bill amount after all line items</p>
+                        </div>
+                        {overallDiscountAmt > 0 && (
+                          <span className="text-sm font-black text-red-500">− ₹{overallDiscountAmt.toFixed(2)}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {/* Type toggle */}
+                        <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setDiscountForm(p => ({ ...p, overallType: "percentage" }))}
+                            className={`px-3 py-2 text-xs font-black transition-colors ${discountForm.overallType === "percentage" ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700"}`}
+                          >% Pct</button>
+                          <button
+                            type="button"
+                            onClick={() => setDiscountForm(p => ({ ...p, overallType: "amount" }))}
+                            className={`px-3 py-2 text-xs font-black transition-colors ${discountForm.overallType === "amount" ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700"}`}
+                          >₹ Amt</button>
+                        </div>
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">
+                            {discountForm.overallType === "percentage" ? "%" : "₹"}
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={discountForm.overallType === "percentage" ? 100 : selectedJob.estimate}
+                            value={discountForm.overallValue || ""}
+                            placeholder={discountForm.overallType === "percentage" ? "e.g. 10" : "e.g. 500"}
+                            onChange={e => setDiscountForm(p => ({ ...p, overallValue: Math.max(0, Number(e.target.value)) }))}
+                            className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                          />
+                        </div>
+                        {discountForm.overallType === "percentage" && discountForm.overallValue > 0 && (
+                          <div className="shrink-0 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-black text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            = ₹{overallDiscountAmt.toFixed(2)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-center space-x-3">
-                <button 
-                  onClick={handleSaveDiscount}
-                  className="px-20 py-2 bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 rounded-xl font-black text-xs hover:bg-green-200 transition-all"
-                >
-                  Save
-                </button>
-                <button 
-                  onClick={() => setIsDiscountModalOpen(false)}
-                  className="px-20 py-2 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-xl font-black text-xs hover:bg-red-200 transition-all"
-                >
-                  Close
-                </button>
+                    {/* Line Item Discounts */}
+                    {discountForm.lineItems.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">Line Item Discounts</h4>
+                          <span className="text-[10px] text-slate-400">Applied per item before taxes</span>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-black uppercase text-[10px] tracking-wider">
+                                <th className="py-2.5 px-3">Item</th>
+                                <th className="py-2.5 px-3 text-right">Amount</th>
+                                <th className="py-2.5 px-3 text-center w-28">Type</th>
+                                <th className="py-2.5 px-3 text-center w-24">Value</th>
+                                <th className="py-2.5 px-3 text-right w-24">Discount</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                              {/* Spares section */}
+                              {discountForm.lineItems.some(i => i.isSpare) && (
+                                <tr className="bg-amber-50 dark:bg-amber-950/20">
+                                  <td colSpan={5} className="py-1.5 px-3 text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-widest">Parts & Consumables</td>
+                                </tr>
+                              )}
+                              {discountForm.lineItems.filter(i => i.isSpare).map(item => {
+                                const discAmt = item.type === "percentage" ? (item.total * item.value / 100) : item.value;
+                                const clampedDisc = Math.min(Math.max(discAmt, 0), item.total);
+                                return (
+                                  <tr key={item.key} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                                    <td className="py-2.5 px-3 font-semibold text-slate-700 dark:text-slate-200 max-w-[180px] truncate">{item.name}</td>
+                                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-600 dark:text-slate-300">₹{item.total}</td>
+                                    <td className="py-2.5 px-3">
+                                      <div className="flex rounded border border-slate-200 dark:border-slate-700 overflow-hidden text-[10px]">
+                                        <button type="button" onClick={() => updateLineItem(item.key, "type", "percentage")} className={`flex-1 py-1 font-black transition-colors ${item.type === "percentage" ? "bg-teal-500 text-white" : "bg-white dark:bg-slate-800 text-slate-500"}`}>%</button>
+                                        <button type="button" onClick={() => updateLineItem(item.key, "type", "amount")} className={`flex-1 py-1 font-black transition-colors ${item.type === "amount" ? "bg-teal-500 text-white" : "bg-white dark:bg-slate-800 text-slate-500"}`}>₹</button>
+                                      </div>
+                                    </td>
+                                    <td className="py-2.5 px-3">
+                                      <input
+                                        type="number" min={0}
+                                        max={item.type === "percentage" ? 100 : item.total}
+                                        value={item.value || ""}
+                                        placeholder="0"
+                                        onChange={e => updateLineItem(item.key, "value", Math.max(0, Number(e.target.value)))}
+                                        className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center font-bold focus:outline-none focus:ring-1 focus:ring-teal-400"
+                                      />
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right font-black">
+                                      {clampedDisc > 0
+                                        ? <span className="text-red-500">− ₹{clampedDisc.toFixed(2)}</span>
+                                        : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              {/* Services section */}
+                              {discountForm.lineItems.some(i => !i.isSpare) && (
+                                <tr className="bg-blue-50 dark:bg-blue-950/20">
+                                  <td colSpan={5} className="py-1.5 px-3 text-[10px] font-black text-blue-700 dark:text-blue-400 uppercase tracking-widest">Services & Labour</td>
+                                </tr>
+                              )}
+                              {discountForm.lineItems.filter(i => !i.isSpare).map(item => {
+                                const discAmt = item.type === "percentage" ? (item.total * item.value / 100) : item.value;
+                                const clampedDisc = Math.min(Math.max(discAmt, 0), item.total);
+                                return (
+                                  <tr key={item.key} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                                    <td className="py-2.5 px-3 font-semibold text-slate-700 dark:text-slate-200 max-w-[180px] truncate">{item.name}</td>
+                                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-600 dark:text-slate-300">₹{item.total}</td>
+                                    <td className="py-2.5 px-3">
+                                      <div className="flex rounded border border-slate-200 dark:border-slate-700 overflow-hidden text-[10px]">
+                                        <button type="button" onClick={() => updateLineItem(item.key, "type", "percentage")} className={`flex-1 py-1 font-black transition-colors ${item.type === "percentage" ? "bg-teal-500 text-white" : "bg-white dark:bg-slate-800 text-slate-500"}`}>%</button>
+                                        <button type="button" onClick={() => updateLineItem(item.key, "type", "amount")} className={`flex-1 py-1 font-black transition-colors ${item.type === "amount" ? "bg-teal-500 text-white" : "bg-white dark:bg-slate-800 text-slate-500"}`}>₹</button>
+                                      </div>
+                                    </td>
+                                    <td className="py-2.5 px-3">
+                                      <input
+                                        type="number" min={0}
+                                        max={item.type === "percentage" ? 100 : item.total}
+                                        value={item.value || ""}
+                                        placeholder="0"
+                                        onChange={e => updateLineItem(item.key, "value", Math.max(0, Number(e.target.value)))}
+                                        className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center font-bold focus:outline-none focus:ring-1 focus:ring-teal-400"
+                                      />
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right font-black">
+                                      {clampedDisc > 0
+                                        ? <span className="text-red-500">− ₹{clampedDisc.toFixed(2)}</span>
+                                        : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* RIGHT — live bill summary */}
+                  <div className="w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex flex-col">
+                    <div className="p-4 border-b border-slate-200 dark:border-slate-800">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Bill Preview</h4>
+                    </div>
+                    <div className="p-4 space-y-2.5 flex-1 overflow-y-auto text-xs">
+                      <div className="flex justify-between text-slate-500">
+                        <span>Subtotal (excl. GST)</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-200">₹{subtotalBeforeTax.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-500">
+                        <span>GST (18%)</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-200">₹{gstAmt.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-slate-700 dark:text-slate-200 border-t border-slate-200 dark:border-slate-700 pt-2">
+                        <span>Gross Total</span>
+                        <span>₹{selectedJob.estimate.toFixed(2)}</span>
+                      </div>
+
+                      {/* Discount breakdown */}
+                      {(lineItemDiscountTotal > 0 || overallDiscountAmt > 0) && (
+                        <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900 p-3 space-y-1.5 mt-2">
+                          <p className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase tracking-widest mb-2">Discounts Applied</p>
+                          {lineItemDiscountTotal > 0 && (
+                            <div className="flex justify-between text-red-500">
+                              <span>Line Item Discounts</span>
+                              <span className="font-black">− ₹{lineItemDiscountTotal.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {overallDiscountAmt > 0 && (
+                            <div className="flex justify-between text-red-500">
+                              <span>Overall Discount{discountForm.overallType === "percentage" ? ` (${discountForm.overallValue}%)` : ""}</span>
+                              <span className="font-black">− ₹{overallDiscountAmt.toFixed(2)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-red-600 font-black border-t border-red-200 dark:border-red-800 pt-1.5">
+                            <span>Total Discount</span>
+                            <span>− ₹{totalDiscount.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Net payable highlight */}
+                      <div className={`rounded-xl p-3 mt-2 ${totalDiscount > 0 ? "bg-teal-500" : "bg-slate-200 dark:bg-slate-700"}`}>
+                        <div className="flex justify-between items-center">
+                          <span className={`text-xs font-black ${totalDiscount > 0 ? "text-white" : "text-slate-600 dark:text-slate-300"}`}>Net Payable</span>
+                          <span className={`text-lg font-black ${totalDiscount > 0 ? "text-white" : "text-slate-800 dark:text-white"}`}>₹{netPayable.toFixed(2)}</span>
+                        </div>
+                        {totalDiscount > 0 && (
+                          <p className="text-[10px] text-teal-100 mt-0.5">You saved ₹{totalDiscount.toFixed(2)} on this bill</p>
+                        )}
+                      </div>
+
+                      <div className="border-t border-slate-200 dark:border-slate-700 pt-2 space-y-1.5">
+                        <div className="flex justify-between text-slate-500">
+                          <span>Already Paid</span>
+                          <span className="font-bold text-teal-600">₹{alreadyPaid.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between font-black">
+                          <span>Balance Due</span>
+                          <span className={balanceDue > 0 ? "text-red-500" : "text-green-600"}>₹{balanceDue.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action buttons inside right panel */}
+                    <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-2 shrink-0">
+                      <button
+                        onClick={handleSaveDiscount}
+                        disabled={totalDiscount <= 0}
+                        className="w-full py-2.5 text-xs font-black text-white bg-teal-500 hover:bg-teal-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed rounded-xl transition-colors"
+                      >
+                        {totalDiscount > 0 ? `Apply ₹${totalDiscount.toFixed(2)} Discount` : "Apply Discount"}
+                      </button>
+                      <button
+                        onClick={() => setIsDiscountModalOpen(false)}
+                        className="w-full py-2 text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ============================================================ */}
         {/* VEHICLE HISTORY MODAL */}
