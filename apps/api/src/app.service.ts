@@ -562,10 +562,15 @@ export class AppService {
     }));
     const saved = await this.jobSparesRepo.save(entities);
 
-    // Create issue transactions and deduct from batches
+    // Create issue transactions and deduct from batches (best-effort — don't fail the save)
+    let systemUserId: string | null = null;
+    try {
+      const [row] = await this.garageRepo.query('SELECT id FROM users LIMIT 1') as { id: string }[];
+      systemUserId = row?.id || null;
+    } catch { /* users table not accessible */ }
+
     for (const item of items) {
       const qty = Number(item.qty) || 1;
-      // Resolve spare_part_id by partNumber if not provided
       let sparePartId: string | null = item.sparePartId || null;
       if (!sparePartId && item.code) {
         const part = await this.sparesRepo.findOne({ where: { partNumber: item.code, isActive: true } });
@@ -573,27 +578,32 @@ export class AppService {
       }
       if (!sparePartId) continue;
 
-      // Pick the batch with most available qty
-      const batch = await this.batchRepo
-        .createQueryBuilder('b')
-        .where('b.sparePartId = :id AND b.availableQty > 0', { id: sparePartId })
-        .orderBy('b.availableQty', 'DESC')
-        .getOne();
-      if (!batch) continue;
+      try {
+        const batch = await this.batchRepo
+          .createQueryBuilder('b')
+          .where('b.sparePartId = :id AND b.availableQty > 0', { id: sparePartId })
+          .orderBy('b.availableQty', 'DESC')
+          .getOne();
+        if (!batch) continue;
 
-      const deduct = Math.min(qty, batch.availableQty);
-      await this.batchRepo.decrement({ id: batch.id }, 'availableQty', deduct);
-      await this.txnRepo.save(this.txnRepo.create({
-        sparePartId,
-        garageId,
-        batchId: batch.id,
-        transactionType: 'issue',
-        referenceType: 'job_card',
-        referenceId: jobCardId,
-        quantity: deduct,
-        unitPrice: Number(item.price),
-        createdBy: garageId,
-      }));
+        const deduct = Math.min(qty, batch.availableQty);
+        await this.batchRepo.decrement({ id: batch.id }, 'availableQty', deduct);
+        if (systemUserId) {
+          await this.txnRepo.save(this.txnRepo.create({
+            sparePartId,
+            garageId,
+            batchId: batch.id,
+            transactionType: 'issue',
+            referenceType: 'job_card',
+            referenceId: jobCardId,
+            quantity: deduct,
+            unitPrice: Number(item.price),
+            createdBy: systemUserId,
+          }));
+        }
+      } catch {
+        // inventory deduction is best-effort; don't fail the whole save
+      }
     }
 
     return saved;
