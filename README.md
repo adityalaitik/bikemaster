@@ -152,6 +152,67 @@ npm run dev --workspace=apps/api
 npm run dev --workspace=apps/web
 ```
 
+## E2E Testing (Playwright)
+
+End-to-end tests live in the `e2e/` directory and cover the complete job lifecycle: new customer registration → estimation → status workflow → discount → payment → delivery.
+
+### Prerequisites
+
+Make sure both servers are running before executing tests:
+```bash
+npm run dev   # starts Next.js (port 3000) and NestJS (port 4000)
+```
+
+### Setup
+
+```bash
+cd e2e
+npm install
+```
+
+> Tests use **system Chrome** (no browser download required). Make sure Google Chrome is installed.
+
+### Run Tests
+
+```bash
+# Run all tests (headed Chrome — you can watch the browser)
+npm run test:headed
+
+# Run only the full lifecycle smoke test
+npx playwright test --headed -g "Full lifecycle smoke test"
+
+# Slow demo — 3-second pause between every step so you can verify each action
+npx playwright test --headed -g "Full lifecycle — slow demo"
+
+# Open Playwright UI (interactive test explorer)
+npm run test:ui
+
+# Run headless (CI mode)
+npm test
+
+# View HTML report after a run
+npm run report
+```
+
+### Test Coverage
+
+| Test | Description |
+|---|---|
+| Step 1 | Register new customer and vehicle |
+| Step 2 | Open job card and navigate to estimation |
+| Step 3 | Add spares and services in estimation |
+| Step 4 | Change status → Client Agreed |
+| Step 5 | Change status → Work in Progress |
+| Step 6 | Apply a 10% discount |
+| Step 7 | Record advance payment |
+| Step 8 | Progress through Work Completed → Out for Delivery → Delivered |
+| Step 9 | Verify timeline reflects full status history |
+| Step 10 | Generate invoice |
+| Smoke | Full lifecycle end-to-end in a single test |
+| Slow demo | Same as smoke but with 3-second pauses for manual verification |
+
+---
+
 ## Vercel Deployment
 
 This repository includes `vercel.json` for deploying the frontend from the monorepo root. Deploy the NestJS API separately on a Node host such as Railway, Render, Fly.io, or Azure App Service.
