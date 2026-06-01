@@ -89,6 +89,11 @@ export class AppController {
     return this.appService.getStats();
   }
 
+  @Get('vehicles/:vehicleNo/history')
+  async getVehicleHistory(@Param('vehicleNo') vehicleNo: string) {
+    return this.appService.getVehicleHistory(vehicleNo);
+  }
+
   @Get('job-cards/:id')
   async getJobCardById(@Param('id') id: string): Promise<JobCard> {
     return this.appService.getJobCardById(id);

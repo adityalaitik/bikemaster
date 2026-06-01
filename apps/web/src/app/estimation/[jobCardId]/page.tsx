@@ -293,7 +293,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
         if (!res.ok) { triggerToast("Job card not found in DB", "warn"); loadFallbackJob(); return; }
 
         const ctx = await res.json();
-        const { jobCard, complaints, packages, offers, employees, spareCatalog, serviceCatalog } = ctx;
+        const { jobCard, complaints, packages, offers, employees } = ctx;
 
         setJob(jobCard);
         setAllocatedSpares((jobCard.spares || []).map((s: SpareItem) => ({ ...s, billedTo: s.billedTo || "customer" })));
@@ -303,8 +303,6 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
         setPackagesMaster(packages || []);
         setOffersMaster(offers || []);
         setEmployeesList(employees || []);
-        setSparesCatalog(spareCatalog || []);
-        setServicesCatalog(serviceCatalog || []);
       } catch (err) {
         console.error("Backend error loading estimation context:", err);
         loadFallbackJob();
@@ -313,14 +311,12 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
     loadData();
   }, [jobCardId]);
 
-  // Fetch catalogs — loads all on mount, filters as user types
   const fetchCatalog = async (q: string) => {
     try {
-      const authHeaders = getAuthHeaders();
       const qs = q ? `?q=${encodeURIComponent(q)}` : '';
       const [sparesRes, servicesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/spare-parts/search${qs}`, { headers: authHeaders }),
-        fetch(`${API_BASE_URL}/services/search${qs}`, { headers: authHeaders }),
+        fetch(`${API_BASE_URL}/spare-parts/search${qs}`, { headers: getAuthHeaders() }),
+        fetch(`${API_BASE_URL}/services/search${qs}`, { headers: getAuthHeaders() }),
       ]);
       if (sparesRes.ok) setSparesCatalog(await sparesRes.json());
       if (servicesRes.ok) setServicesCatalog(await servicesRes.json());
@@ -329,8 +325,15 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
     }
   };
 
+  // Load full catalog on mount (independent of estimation-context success)
   useEffect(() => {
-    fetchCatalog(catalogSearchText);
+    fetchCatalog('');
+  }, []);
+
+  // Filter catalog as user types
+  useEffect(() => {
+    if (catalogSearchText) fetchCatalog(catalogSearchText);
+    else fetchCatalog('');
   }, [catalogSearchText]);
 
   // Add Spare Part from Catalog to Draft

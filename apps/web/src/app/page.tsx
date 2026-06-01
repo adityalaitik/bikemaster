@@ -1377,6 +1377,17 @@ export default function Home() {
       setSelectedJob(job);
       setIsDiscountModalOpen(true);
       return;
+    } else if (action === "History") {
+      setHistoryVehicleNo(job.vehicleNo);
+      setHistoryRows([]);
+      setIsHistoryModalOpen(true);
+      setHistoryLoading(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/vehicles/${encodeURIComponent(job.vehicleNo)}/history`);
+        if (res.ok) setHistoryRows(await res.json());
+      } catch { /* show empty */ }
+      setHistoryLoading(false);
+      return;
     } else if (action === "Invoice") {
       setSelectedJob(job);
       setIsInvoiceModalOpen(true);
@@ -1408,6 +1419,10 @@ export default function Home() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [historyVehicleNo, setHistoryVehicleNo] = useState("");
+  const [historyRows, setHistoryRows] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     card: 0, cash: 0, cheque: 0, other: 0, remarks: ""
   });
@@ -9728,6 +9743,100 @@ export default function Home() {
                 <button 
                   onClick={() => setIsDiscountModalOpen(false)}
                   className="px-20 py-2 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-xl font-black text-xs hover:bg-red-200 transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* VEHICLE HISTORY MODAL */}
+        {/* ============================================================ */}
+        {isHistoryModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 shrink-0">
+                <div className="flex-1 text-center">
+                  <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-widest text-sm">
+                    VEHICLE HISTORY FOR: <span className="text-red-500">{historyVehicleNo}</span>
+                  </h3>
+                </div>
+                <button onClick={() => setIsHistoryModalOpen(false)} className="text-red-500 hover:scale-110 transition-transform ml-4">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Table */}
+              <div className="flex-1 overflow-auto">
+                {historyLoading ? (
+                  <div className="flex items-center justify-center py-20 text-slate-500 dark:text-slate-400 text-sm font-semibold">
+                    Loading history...
+                  </div>
+                ) : historyRows.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-slate-500">
+                    <RefreshCw className="h-10 w-10 mb-3 opacity-30" />
+                    <p className="font-black text-sm uppercase tracking-wider">No service records found</p>
+                    <p className="text-xs mt-1">This vehicle has no previous service history</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
+                    <thead>
+                      <tr className="bg-teal-600 text-white font-black uppercase tracking-wide text-[11px]">
+                        <th className="py-3 px-4">Invoice No</th>
+                        <th className="py-3 px-4">Arrival Date</th>
+                        <th className="py-3 px-4">KMS Driven</th>
+                        <th className="py-3 px-4">Tax On Services</th>
+                        <th className="py-3 px-4">Tax On Parts</th>
+                        <th className="py-3 px-4">Spares</th>
+                        <th className="py-3 px-4">Labours</th>
+                        <th className="py-3 px-4">Discount</th>
+                        <th className="py-3 px-4">Total Amount</th>
+                        <th className="py-3 px-4">Total Paid</th>
+                        <th className="py-3 px-4 text-red-200">Due Amount</th>
+                        <th className="py-3 px-4">Tech Name</th>
+                        <th className="py-3 px-4">Tech Feedback</th>
+                        <th className="py-3 px-4">Customer Feedback</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {historyRows.map((row, idx) => {
+                        const due = Number(row.dueAmount);
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors font-semibold text-slate-700 dark:text-slate-300">
+                            <td className="py-3.5 px-4 font-black text-slate-800 dark:text-white whitespace-nowrap">
+                              <span className="text-slate-400 mr-0.5">⊕</span>{row.invoiceNo}
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">{row.arrivalDate}</td>
+                            <td className="py-3.5 px-4 font-mono">{row.kmsDriven || '—'}</td>
+                            <td className="py-3.5 px-4 font-mono">{Number(row.taxOnServices).toFixed(2)}</td>
+                            <td className="py-3.5 px-4 font-mono">{Number(row.taxOnParts).toFixed(2)}</td>
+                            <td className="py-3.5 px-4 font-mono">{Number(row.spares).toFixed(0)}</td>
+                            <td className="py-3.5 px-4 font-mono">{Number(row.labours).toFixed(0)}</td>
+                            <td className="py-3.5 px-4 font-mono">{Number(row.discount).toFixed(2)}</td>
+                            <td className="py-3.5 px-4 font-mono font-black">{Number(row.totalAmount).toFixed(2)}</td>
+                            <td className="py-3.5 px-4 font-mono">{Number(row.totalPaid).toFixed(2)}</td>
+                            <td className={`py-3.5 px-4 font-black font-mono ${due > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                              {due.toFixed(2)}
+                            </td>
+                            <td className="py-3.5 px-4 font-bold uppercase text-slate-700 dark:text-slate-300 whitespace-nowrap">{row.techName}</td>
+                            <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 italic">{row.techFeedback || '—'}</td>
+                            <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">{row.customerFeedback || '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 shrink-0 flex justify-center">
+                <button
+                  onClick={() => setIsHistoryModalOpen(false)}
+                  className="px-32 py-2.5 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-full font-black text-xs hover:bg-red-200 dark:hover:bg-red-950/60 transition-all"
                 >
                   Close
                 </button>

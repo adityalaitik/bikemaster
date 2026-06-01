@@ -81,6 +81,24 @@ export interface InvoiceReportDto {
   jobCardNo: string;
 }
 
+export interface VehicleHistoryRow {
+  invoiceNo: string;
+  arrivalDate: string;
+  kmsDriven: number;
+  taxOnServices: number;
+  taxOnParts: number;
+  spares: number;
+  labours: number;
+  discount: number;
+  totalAmount: number;
+  totalPaid: number;
+  dueAmount: number;
+  techName: string;
+  techFeedback: string;
+  customerFeedback: string;
+  jobCardNo: string;
+}
+
 const STATUS_TO_UI: Record<string, string> = {
   under_servicing: 'Under Servicing',
   next_day_delivery: 'Next Day Delivery',
@@ -863,6 +881,78 @@ export class AppService {
       this.getServicesMaster(''),
     ]);
     return { jobCard, complaints, packages, offers, employees, spareCatalog, serviceCatalog };
+  }
+
+  // ── Vehicle History ───────────────────────────────────────────────────────
+  async getVehicleHistory(vehicleNo: string): Promise<VehicleHistoryRow[]> {
+    const vehicle = await this.vehicleRepo.findOne({ where: { registrationNo: vehicleNo.toUpperCase() } });
+    if (!vehicle) return [];
+
+    const jobCards = await this.jobCardRepo.find({
+      where: { vehicleId: vehicle.id, isDeleted: false },
+      order: { dateOfArrival: 'DESC' },
+    });
+    if (!jobCards.length) return [];
+
+    const jobCardIds = jobCards.map(jc => jc.id);
+    const jobCardNos = jobCards.map(jc => jc.jobCardNo);
+
+    const [invoices, allSpares, allServices, advisors] = await Promise.all([
+      this.invoiceRepo.find({ where: { jobCardId: In(jobCardIds) } }),
+      this.jobSparesRepo.find({ where: { jobCardId: In(jobCardNos) } }),
+      this.jobServicesRepo.find({ where: { jobCardId: In(jobCardNos) } }),
+      this.employeeRepo.find(),
+    ]);
+
+    const invoiceMap = new Map(invoices.map(inv => [inv.jobCardId, inv]));
+    const sparesMap = new Map<string, JobSpareItemEntity[]>();
+    const servicesMap = new Map<string, JobServiceItemEntity[]>();
+    for (const s of allSpares) {
+      if (!sparesMap.has(s.jobCardId)) sparesMap.set(s.jobCardId, []);
+      sparesMap.get(s.jobCardId)!.push(s);
+    }
+    for (const s of allServices) {
+      if (!servicesMap.has(s.jobCardId)) servicesMap.set(s.jobCardId, []);
+      servicesMap.get(s.jobCardId)!.push(s);
+    }
+    const advisorMap = new Map(advisors.map(e => [e.id, e]));
+
+    return jobCards.map(jc => {
+      const invoice = invoiceMap.get(jc.id);
+      const spareItems = sparesMap.get(jc.jobCardNo) || [];
+      const serviceItems = servicesMap.get(jc.jobCardNo) || [];
+
+      const sparesTotal = spareItems.reduce((sum, s) => sum + Number(s.price) * s.quantity, 0);
+      const laboursTotal = serviceItems.reduce((sum, s) => sum + Number(s.rate), 0);
+      const GST = 0.18;
+      const taxOnParts = Math.round(sparesTotal * GST * 100) / 100;
+      const taxOnServices = Math.round(laboursTotal * GST * 100) / 100;
+      const totalAmount = invoice ? Number(invoice.totalAmount) : (sparesTotal + laboursTotal + taxOnParts + taxOnServices);
+      const discount = invoice ? Number(invoice.discountAmount) : Number(jc.overallDiscount) || 0;
+      const totalPaid = Number(jc.paidAmount) || 0;
+      const dueAmount = Math.max(0, totalAmount - totalPaid);
+
+      const advisor = jc.serviceAdvisorId ? advisorMap.get(jc.serviceAdvisorId) : null;
+      const techName = advisor?.name?.toUpperCase() || 'N/A';
+
+      return {
+        invoiceNo: invoice?.invoiceNo || jc.jobCardNo,
+        arrivalDate: jc.dateOfArrival ? new Date(jc.dateOfArrival).toISOString().split('T')[0] : 'N/A',
+        kmsDriven: jc.odometerIn || 0,
+        taxOnServices,
+        taxOnParts,
+        spares: sparesTotal,
+        labours: laboursTotal,
+        discount,
+        totalAmount,
+        totalPaid,
+        dueAmount,
+        techName,
+        techFeedback: jc.ratingFeedback || '',
+        customerFeedback: jc.rating ? `${jc.rating}/5` : '',
+        jobCardNo: jc.jobCardNo,
+      };
+    });
   }
 
   // ── Save Estimation (single save endpoint) ────────────────────────────────
