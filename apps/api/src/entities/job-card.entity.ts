@@ -28,7 +28,7 @@ export class JobCardEntity {
 
   @Column({
     type: 'enum',
-    enum: ['draft', 'under_servicing', 'next_day_delivery', 'upcoming_delivery', 'ready_for_delivery', 'payment_processing', 'completed', 'deleted'],
+    enum: ['draft', 'under_servicing', 'next_day_delivery', 'upcoming_delivery', 'ready_for_delivery', 'payment_processing', 'completed', 'deleted', 'client_agreed', 'work_in_progress', 'work_on_hold', 'work_completed', 'out_for_delivery', 'delivered'],
     default: 'draft',
   })
   status: string;
@@ -91,6 +91,9 @@ export class JobCardEntity {
 
   @Column({ name: 'payment_breakdown', type: 'json', nullable: true })
   paymentBreakdown: { card: number; cash: number; cheque: number; other: number; remarks: string } | null;
+
+  @Column({ name: 'status_history', type: 'json', nullable: true })
+  statusHistory: Array<{ time: string; status: string; label: string; note: string }> | null;
 
   @Column({ name: 'is_deleted', default: false })
   isDeleted: boolean;

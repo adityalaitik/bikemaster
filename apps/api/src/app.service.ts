@@ -33,6 +33,7 @@ export interface JobCard {
   date: string; complaints: Complaint[]; spares: SpareItem[]; services: ServiceItem[];
   timeline: TimelineEntry[]; isEstimated?: boolean; isStatusFilled?: boolean; overallDiscount?: number; rating?: number;
   paymentBreakdown?: { card: number; cash: number; cheque: number; other: number; remarks: string } | null;
+  statusNote?: string;
 }
 
 export interface VehicleBrand { id: string; name: string; }
@@ -107,6 +108,12 @@ const STATUS_TO_UI: Record<string, string> = {
   payment_processing: 'Payment Processing',
   completed: 'Completed',
   draft: 'Draft',
+  client_agreed: 'Client Agreed',
+  work_in_progress: 'Work in Progress',
+  work_on_hold: 'Work on Hold',
+  work_completed: 'Work Completed',
+  out_for_delivery: 'Out for Delivery',
+  delivered: 'Delivered',
 };
 
 const STATUS_TO_DB: Record<string, string> = {
@@ -116,8 +123,25 @@ const STATUS_TO_DB: Record<string, string> = {
   'Ready for Delivery': 'ready_for_delivery',
   'Payment Processing': 'payment_processing',
   'Completed': 'completed',
-  'Delivered': 'completed',
+  'Delivered': 'delivered',
   'Draft': 'draft',
+  'Client Agreed': 'client_agreed',
+  'Work in Progress': 'work_in_progress',
+  'Work on Hold': 'work_on_hold',
+  'Work Completed': 'work_completed',
+  'Out for Delivery': 'out_for_delivery',
+};
+
+const STATUS_COMPLETION: Record<string, number> = {
+  client_agreed: 30,
+  work_in_progress: 50,
+  work_on_hold: 45,
+  work_completed: 80,
+  out_for_delivery: 90,
+  delivered: 100,
+  ready_for_delivery: 85,
+  payment_processing: 70,
+  completed: 100,
 };
 
 const EMPLOYEE_TYPE_TO_ROLE: Record<string, string> = {
@@ -756,7 +780,18 @@ export class AppService {
     if (data.isStatusFilled !== undefined) entity.isStatusFilled = data.isStatusFilled;
     if (data.overallDiscount !== undefined) entity.overallDiscount = data.overallDiscount;
     if (data.completion !== undefined) entity.completion = data.completion;
-    if (data.status) entity.status = STATUS_TO_DB[data.status] || data.status;
+    if (data.status) {
+      const dbStatus = STATUS_TO_DB[data.status] || data.status;
+      if (dbStatus !== entity.status) {
+        const note = (data as any).statusNote || '';
+        const historyEntry = { time: new Date().toISOString(), status: dbStatus, label: data.status, note };
+        entity.statusHistory = [...(entity.statusHistory || []), historyEntry];
+        if (STATUS_COMPLETION[dbStatus] !== undefined && data.completion === undefined) {
+          entity.completion = STATUS_COMPLETION[dbStatus];
+        }
+      }
+      entity.status = dbStatus;
+    }
     if ((data as any).paid !== undefined) entity.paidAmount = (data as any).paid;
     if ((data as any).paymentBreakdown !== undefined) entity.paymentBreakdown = (data as any).paymentBreakdown;
     if ((data as any).actualDeliveryDate !== undefined) entity.actualDeliveryDate = new Date((data as any).actualDeliveryDate);
@@ -818,11 +853,13 @@ export class AppService {
     if (entity.isEstimated) {
       timeline.push({ time: updatedAt, title: 'Estimation Calculated', desc: `Estimate: ₹${estimate.toFixed(2)}` });
     }
-    if (entity.isStatusFilled) {
-      timeline.push({ time: updatedAt, title: 'Client Agreed with Estimation', desc: 'Status confirmed by advisor' });
-    }
     if (discount > 0) {
       timeline.push({ time: updatedAt, title: 'Discount Applied', desc: `Discount: ₹${discount.toFixed(2)}` });
+    }
+    if (Array.isArray(entity.statusHistory)) {
+      for (const h of entity.statusHistory) {
+        timeline.push({ time: h.time, title: `Status: ${h.label}`, desc: h.note || `Updated to ${h.label}` });
+      }
     }
 
     return {
