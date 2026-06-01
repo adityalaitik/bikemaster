@@ -352,7 +352,8 @@ const INITIAL_JOBS = [
 
 export default function Home() {
   const router = useRouter();
-  const [jobs, setJobs] = useState(INITIAL_JOBS);
+  const [jobs, setJobs] = useState<JobCard[]>(INITIAL_JOBS);
+  const [invoices, setInvoices] = useState<any[]>([]);
   const [theme, setTheme] = useState("light");
   const [mounted, setMounted] = useState(false);
 
@@ -483,6 +484,66 @@ export default function Home() {
     { id: "s3", name: "SILENCER PAINT", category: "bike", code: "Dent and Paint", amount: 249 },
     { id: "s4", name: "POLISH", category: "bike", code: "Cleaning Services", amount: 149 },
   ]);
+
+  // Load invoices from Backend
+  useEffect(() => {
+    const fetchInvoices = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/invoices`);
+        if (res.ok) {
+          const data = await res.json();
+          setInvoices(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch invoices", err);
+      }
+    };
+    fetchInvoices();
+  }, [activeTab]);
+
+  // Load Inventory Stock Summary from Backend
+  useEffect(() => {
+    const fetchInventory = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/spare-parts/stock-summary`);
+        if (res.ok) {
+          const data = await res.json();
+          setInventoryStockSummary(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch inventory", err);
+      }
+    };
+    if (activeTab === "Inventory Management") {
+      fetchInventory();
+    }
+  }, [activeTab]);
+
+  // Load Services Master from Backend
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/services-master`);
+        if (res.ok) {
+          const data = await res.json();
+          const mapped = data.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            category: s.category || "General",
+            code: s.code,
+            amount: s.rate
+          }));
+          setServicesList(mapped);
+        }
+      } catch (err) {
+        console.error("Failed to fetch services", err);
+      }
+    };
+    if (activeTab === "Manage Services") {
+      fetchServices();
+    }
+  }, [activeTab]);
+
   const [deletedRecordsList, setDeletedRecordsList] = useState([
     { id: "del1", date: "2026-05-28", vehicle: "TVS Apache 160", name: "Debasis Jena", plateNo: "OD-02-X-4422", mobile: "9853312345", invoice: "INV-2026-009", discount: 150, due: 0, supervisor: "Anil Dash", tech: "Manoj Kumar", kms: 12500, source: "Walk-in" },
     { id: "del2", date: "2026-05-27", vehicle: "Suzuki Access 125", name: "Mamata Sahu", plateNo: "OD-33-A-1100", mobile: "9438123456", invoice: "INV-2026-007", discount: 0, due: 350, supervisor: "Subhashis Sen", tech: "Ramesh Naik", kms: 8900, source: "Referral" },
@@ -2104,10 +2165,22 @@ export default function Home() {
                             </button>
                             {canDelete && (
                               <button
-                                onClick={() => {
+                                onClick={async () => {
                                   if (confirm("Are you sure you want to delete this record?")) {
-                                    setList(list.filter((item) => item.id !== row.id));
-                                    triggerToast("Record deleted successfully", "success");
+                                    if (activeTab === "Manage Services") {
+                                      try {
+                                        await fetch(`${API_BASE_URL}/services-master/${row.id}`, { method: "DELETE" });
+                                        setList(list.filter((item) => item.id !== row.id));
+                                        triggerToast("Service deleted successfully", "success");
+                                      } catch (err) {
+                                        console.error("Failed to delete service", err);
+                                        triggerToast("Backend offline, deleting locally", "warn");
+                                        setList(list.filter((item) => item.id !== row.id));
+                                      }
+                                    } else {
+                                      setList(list.filter((item) => item.id !== row.id));
+                                      triggerToast("Record deleted successfully", "success");
+                                    }
                                   }
                                 }}
                                 className="p-1.5 rounded hover:bg-red-50 text-red-500 transition-colors"
@@ -2140,11 +2213,27 @@ export default function Home() {
       // SECTION A — BUSINESS REPORTS
       // ==========================================
       case "GST Filing Reports": {
-        const gstItems = [
-          { id: "g1", invoiceNo: "INV-2026-041", date: "2026-05-28", customer: "Debasis Jena", gstin: "21AAMCS8857L1ZO", subtotal: 1200, total: 1416, insurance: 0, discount: 50, payable: 1366, paid: 1366, due: 0 },
-          { id: "g2", invoiceNo: "INV-2026-042", date: "2026-05-27", customer: "Mamata Sahu", gstin: "—", subtotal: 850, total: 1003, insurance: 500, discount: 0, payable: 503, paid: 503, due: 0 },
-          { id: "g3", invoiceNo: "INV-2026-043", date: "2026-05-26", customer: "Priyabrata Das", gstin: "21ABBCS1234F1ZO", subtotal: 2400, total: 2832, insurance: 0, discount: 100, payable: 2732, paid: 2000, due: 732 },
-        ];
+        const filteredInvoices = invoices.filter(inv => {
+          const invDate = new Date(inv.date);
+          const start = new Date(reportStartDate);
+          const end = new Date(reportEndDate);
+          return invDate >= start && invDate <= end;
+        });
+
+        const gstItems = filteredInvoices.map(inv => ({
+          id: inv.id,
+          invoiceNo: inv.invoiceNo,
+          date: inv.date,
+          customer: inv.customerName,
+          gstin: inv.gstin,
+          subtotal: inv.subtotal,
+          total: inv.totalAmount,
+          insurance: inv.insuranceAmount,
+          discount: inv.discountAmount,
+          payable: inv.totalAmount - inv.insuranceAmount, // Assumption: payable is net after insurance
+          paid: inv.paidAmount,
+          due: inv.dueAmount
+        }));
 
         return (
           <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/50 dark:bg-slate-900 font-sans w-full">
@@ -2489,10 +2578,36 @@ export default function Home() {
       }
 
       case "Report By Invoices": {
-        const invoiceRows = [
-          { id: "r1", type: "Services", jobCode: "JC-0091", invNo: "INV-2026-009", date: "28/05/2026", customer: "Debasis Jena", vehicle: "OD-02-X-4422", contact: "9853312345", arrival: "26/05/2026", spares: 1200, taxPart: 216, labour: 500, taxSvc: 90, discount: 50, total: 1956, paid: 1956 },
-          { id: "r2", type: "Counter Sales", jobCode: "POS-9912", invNo: "CS-2026-004", date: "27/05/2026", customer: "Walk-in Buyer", vehicle: "Counter Parts", contact: "9988112233", arrival: "27/05/2026", spares: 450, taxPart: 81, labour: 0, taxSvc: 0, discount: 0, total: 531, paid: 531 },
-        ];
+        const filteredInvoices = invoices.filter(inv => {
+          const invDate = new Date(inv.date);
+          const start = new Date(reportStartDate);
+          const end = new Date(reportEndDate);
+          const dateMatch = invDate >= start && invDate <= end;
+          
+          if (reportInvoiceType === "By Counter Sales") {
+            return dateMatch && inv.type === "Counter Sales";
+          }
+          return dateMatch;
+        });
+
+        const invoiceRows = filteredInvoices.map(inv => ({
+          id: inv.id,
+          type: inv.type || "Services",
+          jobCode: inv.jobCardNo,
+          invNo: inv.invoiceNo,
+          date: inv.date,
+          customer: inv.customerName,
+          vehicle: inv.vehicleNo,
+          contact: inv.phone,
+          arrival: inv.arrivalDate,
+          spares: inv.subtotal, // We'd need further breakdown for true spares vs labour
+          taxPart: inv.taxAmount, // Placeholder for parts tax
+          labour: 0, // Placeholder
+          taxSvc: 0, // Placeholder
+          discount: inv.discountAmount,
+          total: inv.totalAmount,
+          paid: inv.paidAmount
+        }));
 
         return (
           <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/50 dark:bg-slate-900 font-sans w-full">
@@ -9117,16 +9232,57 @@ export default function Home() {
             }
 
             if (setList) {
-              if (crudModalMode === "new") {
-                const newRec = {
-                  id: activeTab === "Workshop Info" ? (crudForm.id || Math.random().toString()) : (activeTab.slice(0, 2).toLowerCase() + Date.now()),
-                  ...crudForm
+              if (activeTab === "Manage Services") {
+                const saveService = async () => {
+                  try {
+                    const method = crudModalMode === "new" ? "POST" : "PATCH";
+                    const url = crudModalMode === "new" ? `${API_BASE_URL}/services-master` : `${API_BASE_URL}/services-master/${crudSelectedId}`;
+                    const res = await fetch(url, {
+                      method,
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(crudForm)
+                    });
+                    if (res.ok) {
+                      const saved = await res.json();
+                      const mapped = {
+                        id: saved.id,
+                        name: saved.name,
+                        category: saved.category || "General",
+                        code: saved.code,
+                        amount: saved.rate
+                      };
+                      if (crudModalMode === "new") {
+                        setList([...list, mapped]);
+                        triggerToast("Service added successfully!", "success");
+                      } else {
+                        setList(list.map((item: any) => (item.id === crudSelectedId ? mapped : item)));
+                        triggerToast("Service updated successfully!", "success");
+                      }
+                    }
+                  } catch (err) {
+                    console.error("Failed to save service", err);
+                    triggerToast("Backend offline, updating locally", "warn");
+                    // Fallback local update
+                    if (crudModalMode === "new") {
+                      setList([...list, { id: "sv" + Date.now(), ...crudForm }]);
+                    } else {
+                      setList(list.map((item: any) => (item.id === crudSelectedId ? { ...item, ...crudForm } : item)));
+                    }
+                  }
                 };
-                setList([...list, newRec]);
-                triggerToast("Record added successfully!", "success");
+                saveService();
               } else {
-                setList(list.map((item: any) => (item.id === crudSelectedId ? { ...item, ...crudForm } : item)));
-                triggerToast("Record updated successfully!", "success");
+                if (crudModalMode === "new") {
+                  const newRec = {
+                    id: activeTab === "Workshop Info" ? (crudForm.id || Math.random().toString()) : (activeTab.slice(0, 2).toLowerCase() + Date.now()),
+                    ...crudForm
+                  };
+                  setList([...list, newRec]);
+                  triggerToast("Record added successfully!", "success");
+                } else {
+                  setList(list.map((item: any) => (item.id === crudSelectedId ? { ...item, ...crudForm } : item)));
+                  triggerToast("Record updated successfully!", "success");
+                }
               }
             }
 

@@ -19,6 +19,7 @@ import { PackageEntity } from './entities/package.entity';
 import { PackageItemEntity } from './entities/package-item.entity';
 import { OfferEntity } from './entities/offer.entity';
 import { InvoiceEntity } from './entities/invoice.entity';
+import { InventoryTransactionEntity } from './entities/inventory-transaction.entity';
 
 export interface Complaint { text: string; finding: string; action: string; }
 export interface SpareItem { id?: string; name: string; qty: number; price: number; mrp: number; hsn: string; code: string; status: string; billedTo: 'customer' | 'insurance'; }
@@ -37,13 +38,48 @@ export interface JobCard {
 export interface VehicleBrand { id: string; name: string; }
 export interface VehicleModel { id: string; brandId: string; name: string; category: string; variant: string; }
 export interface Employee { id: string; name: string; role: string; }
-export interface SparePartMaster { id: string; name: string; partNumber: string; price: number; mrp: number; stockQty: number; hsnCode: string; }
-export interface ServiceMaster { id: string; name: string; code: string; rate: number; sacCode: string; }
+export interface SparePartMaster { id: string; name: string; partNumber: string; price: number; mrp: number; stockQty: number; hsnCode: string; brand?: string; model?: string; variant?: string; location?: string; }
+export interface InventoryStockDto {
+  id: string;
+  spareName: string;
+  brand: string;
+  model: string;
+  variant: string;
+  partBrand: string;
+  partNo: string;
+  totalQty: number;
+  consumedQty: number;
+  availableQty: number;
+  estimatedQty: number;
+  location: string;
+}
+export interface ServiceMaster { id: string; name: string; code: string; rate: number; sacCode: string; category?: string; }
 export interface ComplaintDto { text: string; finding: string; action: string; }
 export interface PackageItemDto { type: 'spare' | 'service'; id: string; name: string; code: string; qty: number; price: number; mrp: number; hsn: string; }
 export interface PackageDto { id: string; name: string; description: string; totalPrice: number; spares: PackageItemDto[]; services: PackageItemDto[]; }
 export interface OfferDto { id: string; title: string; description: string; offerType: string; discountValue: number; endDate: string; }
 export interface InvoiceDto { invoiceNo: string; jobCardNo: string; customerName: string; vehicleNo: string; brandModel: string; subtotal: number; discountAmount: number; taxAmount: number; totalAmount: number; customerAmount: number; insuranceAmount: number; }
+export interface InvoiceReportDto {
+  id: string;
+  invoiceNo: string;
+  date: string;
+  customerName: string;
+  gstin: string;
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
+  discountAmount: number;
+  insuranceAmount: number;
+  customerAmount: number;
+  paidAmount: number;
+  dueAmount: number;
+  type: string;
+  vehicleNo: string;
+  brandModel: string;
+  phone: string;
+  arrivalDate: string;
+  jobCardNo: string;
+}
 
 const STATUS_TO_UI: Record<string, string> = {
   under_servicing: 'Under Servicing',
@@ -93,6 +129,7 @@ export class AppService {
     @InjectRepository(PackageItemEntity) private packageItemRepo: Repository<PackageItemEntity>,
     @InjectRepository(OfferEntity) private offerRepo: Repository<OfferEntity>,
     @InjectRepository(InvoiceEntity) private invoiceRepo: Repository<InvoiceEntity>,
+    @InjectRepository(InventoryTransactionEntity) private txnRepo: Repository<InventoryTransactionEntity>,
   ) {}
 
   getHello(): string { return 'BikeMasters API v1 - Database Enabled'; }
@@ -196,8 +233,32 @@ export class AppService {
   async addServiceToMaster(data: any): Promise<ServiceMaster> {
     const garage = await this.garageRepo.findOne({ where: { isActive: true } });
     const garageId = garage?.id || '';
-    const sv = await this.servicesRepo.save(this.servicesRepo.create({ garageId, serviceName: data.name, serviceCode: data.code, defaultRate: Number(data.rate), hsnSacCode: data.sac || '998714' }));
-    return { id: sv.id, name: sv.serviceName, code: sv.serviceCode, rate: Number(sv.defaultRate), sacCode: sv.hsnSacCode || 'N/A' };
+    const sv = await this.servicesRepo.save(this.servicesRepo.create({ 
+      garageId, 
+      serviceName: data.name, 
+      serviceCode: data.code, 
+      category: data.category,
+      defaultRate: Number(data.rate || data.amount), 
+      hsnSacCode: data.sac || data.sacCode || '998714' 
+    }));
+    return { id: sv.id, name: sv.serviceName, code: sv.serviceCode, rate: Number(sv.defaultRate), sacCode: sv.hsnSacCode || 'N/A', category: sv.category };
+  }
+
+  async updateServiceInMaster(id: string, data: any): Promise<ServiceMaster> {
+    await this.servicesRepo.update(id, {
+      serviceName: data.name,
+      serviceCode: data.code,
+      category: data.category,
+      defaultRate: Number(data.rate || data.amount),
+      hsnSacCode: data.sac || data.sacCode,
+    });
+    const sv = await this.servicesRepo.findOneBy({ id });
+    if (!sv) throw new Error(`Service ${id} not found`);
+    return { id: sv.id, name: sv.serviceName, code: sv.serviceCode, rate: Number(sv.defaultRate), sacCode: sv.hsnSacCode || 'N/A', category: sv.category };
+  }
+
+  async deleteServiceFromMaster(id: string): Promise<void> {
+    await this.servicesRepo.update(id, { isActive: false });
   }
 
   // ── Generate Invoice ──────────────────────────────────────────────────────
@@ -244,6 +305,62 @@ export class AppService {
     await this.jobCardRepo.update({ jobCardNo }, { isEstimated: true, overallDiscount: discountAmount });
 
     return { invoiceNo: invoiceData.invoiceNo, jobCardNo, customerName: customer?.name || 'Customer', vehicleNo: vehicle?.registrationNo || 'N/A', brandModel, subtotal, discountAmount, taxAmount, totalAmount, customerAmount, insuranceAmount };
+  }
+
+  async getInvoices(): Promise<InvoiceReportDto[]> {
+    const invoices = await this.invoiceRepo.find({
+      order: { createdAt: 'DESC' }
+    });
+
+    const reportData: InvoiceReportDto[] = [];
+
+    for (const inv of invoices) {
+      const jc = await this.jobCardRepo.findOneBy({ id: inv.jobCardId });
+      const customer = await this.customerRepo.findOneBy({ id: inv.customerId });
+      
+      let vehicleNo = 'N/A';
+      let brandModel = 'N/A';
+      let arrivalDate = 'N/A';
+      let phone = 'N/A';
+
+      if (jc) {
+        const vehicle = await this.vehicleRepo.findOneBy({ id: jc.vehicleId });
+        if (vehicle) {
+          vehicleNo = vehicle.registrationNo;
+          const model = await this.modelRepo.findOneBy({ id: vehicle.modelId });
+          if (model) {
+            const brand = await this.brandRepo.findOneBy({ id: model.brandId });
+            brandModel = `${brand?.name || ''} ${model.name}`.trim();
+          }
+        }
+        arrivalDate = jc.dateOfArrival?.toISOString().split('T')[0] || 'N/A';
+        phone = customer?.phone || 'N/A';
+      }
+
+      reportData.push({
+        id: inv.id,
+        invoiceNo: inv.invoiceNo,
+        date: inv.createdAt.toISOString().split('T')[0],
+        customerName: customer?.name || 'Unknown',
+        gstin: customer?.gstin || '—',
+        subtotal: Number(inv.subtotal),
+        taxAmount: Number(inv.taxAmount),
+        totalAmount: Number(inv.totalAmount),
+        discountAmount: Number(inv.discountAmount),
+        insuranceAmount: Number(inv.insuranceAmount),
+        customerAmount: Number(inv.customerAmount),
+        paidAmount: jc ? Number(jc.paidAmount) : 0,
+        dueAmount: jc ? Math.max(0, Number(inv.totalAmount) - Number(jc.paidAmount)) : Number(inv.totalAmount),
+        type: inv.invoiceType === 'counter_sale' ? 'Counter Sales' : 'Services',
+        vehicleNo,
+        brandModel,
+        phone,
+        arrivalDate,
+        jobCardNo: jc?.jobCardNo || 'N/A',
+      });
+    }
+
+    return reportData;
   }
 
   // ── Brands ────────────────────────────────────────────────────────────────
@@ -302,12 +419,73 @@ export class AppService {
     });
   }
 
+  async getInventoryStockSummary(): Promise<InventoryStockDto[]> {
+    const parts = await this.sparesRepo.find({ where: { isActive: true } });
+    if (!parts.length) return [];
+
+    const partIds = parts.map(p => p.id);
+
+    // Fetch batches and transactions in parallel
+    const [batches, issueTxns, estimatedItems] = await Promise.all([
+      this.batchRepo.createQueryBuilder('b').where('b.sparePartId IN (:...ids)', { ids: partIds }).getMany(),
+      this.txnRepo.createQueryBuilder('t')
+        .select('t.sparePartId', 'sparePartId')
+        .addSelect('SUM(t.quantity)', 'issued')
+        .where('t.sparePartId IN (:...ids)', { ids: partIds })
+        .andWhere("t.transactionType = 'issue'")
+        .groupBy('t.sparePartId')
+        .getRawMany(),
+      this.jobSparesRepo.createQueryBuilder('js')
+        .select('js.partNumber', 'partNumber')
+        .addSelect('SUM(js.quantity)', 'estimatedQty')
+        .where("js.status = 'estimated'")
+        .groupBy('js.partNumber')
+        .getRawMany(),
+    ]);
+
+    // Build lookup maps
+    const issueMap = new Map<string, number>(issueTxns.map(r => [r.sparePartId, Number(r.issued)]));
+    const estimatedMap = new Map<string, number>(estimatedItems.map(r => [r.partNumber, Number(r.estimatedQty)]));
+
+    return parts.map(p => {
+      const partBatches = batches.filter(b => b.sparePartId === p.id);
+      const totalQty = partBatches.reduce((acc, b) => acc + Number(b.quantity), 0);
+      const availableQty = partBatches.reduce((acc, b) => acc + Number(b.availableQty), 0);
+
+      // Use transaction ledger if records exist, else fall back to batch difference
+      const txnConsumed = issueMap.get(p.id);
+      const consumedQty = txnConsumed !== undefined ? txnConsumed : (totalQty - availableQty);
+
+      return {
+        id: p.id,
+        spareName: p.partName,
+        brand: p.compatibleBrand || 'Universal',
+        model: p.compatibleModel || 'All Models',
+        variant: p.compatibleVariant || 'N/A',
+        partBrand: p.partBrand || 'OEM',
+        partNo: p.partNumber,
+        totalQty,
+        consumedQty,
+        availableQty,
+        estimatedQty: estimatedMap.get(p.partNumber) || 0,
+        location: p.binLocation || 'Storage',
+      };
+    });
+  }
+
   // ── Services Master ───────────────────────────────────────────────────────
   async getServicesMaster(query?: string): Promise<ServiceMaster[]> {
     const qb = this.servicesRepo.createQueryBuilder('sv').where('sv.isActive = true');
     if (query) qb.andWhere('(sv.serviceName LIKE :q OR sv.serviceCode LIKE :q)', { q: `%${query}%` });
     const rows = await qb.getMany();
-    return rows.map(r => ({ id: r.id, name: r.serviceName, code: r.serviceCode, rate: Number(r.defaultRate), sacCode: r.hsnSacCode || 'N/A' }));
+    return rows.map(r => ({ 
+      id: r.id, 
+      name: r.serviceName, 
+      code: r.serviceCode, 
+      rate: Number(r.defaultRate), 
+      sacCode: r.hsnSacCode || 'N/A',
+      category: r.category || 'Mechanical Services'
+    }));
   }
 
   // ── Customer Sources ──────────────────────────────────────────────────────
@@ -318,13 +496,65 @@ export class AppService {
 
   // ── Save Spare Items ──────────────────────────────────────────────────────
   async saveSpareItems(jobCardId: string, items: any[]) {
+    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
+    const garageId = garage?.id || '';
+
+    // Restore batch qty for any existing issue transactions on this job card
+    const existingTxns = await this.txnRepo.find({
+      where: { referenceType: 'job_card', referenceId: jobCardId, transactionType: 'issue' },
+    });
+    for (const txn of existingTxns) {
+      if (txn.batchId) {
+        await this.batchRepo.increment({ id: txn.batchId }, 'availableQty', txn.quantity);
+      }
+    }
+    if (existingTxns.length) await this.txnRepo.remove(existingTxns);
+
+    // Save job spare items
     await this.jobSparesRepo.delete({ jobCardId });
     const entities = items.map(item => this.jobSparesRepo.create({
       jobCardId, partName: item.name, partNumber: item.code,
+      sparePartId: item.sparePartId || null,
       price: item.price, mrp: item.mrp || item.price,
       quantity: item.qty, billedTo: item.billedTo || 'customer', status: item.status || 'estimated',
     }));
-    return this.jobSparesRepo.save(entities);
+    const saved = await this.jobSparesRepo.save(entities);
+
+    // Create issue transactions and deduct from batches
+    for (const item of items) {
+      const qty = Number(item.qty) || 1;
+      // Resolve spare_part_id by partNumber if not provided
+      let sparePartId: string | null = item.sparePartId || null;
+      if (!sparePartId && item.code) {
+        const part = await this.sparesRepo.findOne({ where: { partNumber: item.code, isActive: true } });
+        sparePartId = part?.id || null;
+      }
+      if (!sparePartId) continue;
+
+      // Pick the batch with most available qty
+      const batch = await this.batchRepo
+        .createQueryBuilder('b')
+        .where('b.sparePartId = :id AND b.availableQty > 0', { id: sparePartId })
+        .orderBy('b.availableQty', 'DESC')
+        .getOne();
+      if (!batch) continue;
+
+      const deduct = Math.min(qty, batch.availableQty);
+      await this.batchRepo.decrement({ id: batch.id }, 'availableQty', deduct);
+      await this.txnRepo.save(this.txnRepo.create({
+        sparePartId,
+        garageId,
+        batchId: batch.id,
+        transactionType: 'issue',
+        referenceType: 'job_card',
+        referenceId: jobCardId,
+        quantity: deduct,
+        unitPrice: Number(item.price),
+        createdBy: garageId,
+      }));
+    }
+
+    return saved;
   }
 
   // ── Save Service Items ────────────────────────────────────────────────────

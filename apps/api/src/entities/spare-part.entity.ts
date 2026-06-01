@@ -17,6 +17,21 @@ export class SparePartEntity {
   @Column({ name: 'brand_id', nullable: true })
   brandId: string;
 
+  @Column({ name: 'compatible_brand', nullable: true })
+  compatibleBrand: string;
+
+  @Column({ name: 'compatible_model', nullable: true })
+  compatibleModel: string;
+
+  @Column({ name: 'compatible_variant', nullable: true })
+  compatibleVariant: string;
+
+  @Column({ name: 'part_brand', nullable: true })
+  partBrand: string;
+
+  @Column({ name: 'bin_location', nullable: true, default: 'Storage' })
+  binLocation: string;
+
   @Column({ name: 'hsn_code', nullable: true })
   hsnCode: string;
 

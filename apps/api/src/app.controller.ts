@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query, Request } from '@nestjs/common';
-import { AppService, JobCard, SpareItem, ServiceItem, VehicleBrand, VehicleModel, Employee, SparePartMaster, ServiceMaster, ComplaintDto, PackageDto, OfferDto, InvoiceDto } from './app.service';
+import { AppService, JobCard, SpareItem, ServiceItem, VehicleBrand, VehicleModel, Employee, SparePartMaster, ServiceMaster, ComplaintDto, PackageDto, OfferDto, InvoiceDto, InvoiceReportDto } from './app.service';
 import { AuthService } from './auth/auth.service';
 import { Public } from './auth/public.decorator';
 import { Roles } from './auth/roles.decorator';
@@ -16,6 +16,11 @@ export class AppController {
   @Get()
   getHello(): string {
     return this.appService.getHello();
+  }
+
+  @Get('invoices')
+  async getInvoices(): Promise<InvoiceReportDto[]> {
+    return this.appService.getInvoices();
   }
 
   // ============================================================
@@ -40,6 +45,11 @@ export class AppController {
   @Get('spare-parts')
   async getSpareParts(@Query('q') q?: string): Promise<SparePartMaster[]> {
     return this.appService.getSpareParts(q);
+  }
+
+  @Get('spare-parts/stock-summary')
+  async getStockSummary() {
+    return this.appService.getInventoryStockSummary();
   }
 
   @Get('spare-parts/search')
@@ -152,6 +162,16 @@ export class AppController {
   @Post('services-master')
   async addService(@Body() data: any): Promise<ServiceMaster> {
     return this.appService.addServiceToMaster(data);
+  }
+
+  @Patch('services-master/:id')
+  async updateService(@Param('id') id: string, @Body() data: any): Promise<ServiceMaster> {
+    return this.appService.updateServiceInMaster(id, data);
+  }
+
+  @Delete('services-master/:id')
+  async deleteService(@Param('id') id: string) {
+    return this.appService.deleteServiceFromMaster(id);
   }
 
   @Post('invoices/generate-pdf/:jobCardId')

@@ -24,12 +24,14 @@ import { PackageEntity } from './entities/package.entity';
 import { PackageItemEntity } from './entities/package-item.entity';
 import { OfferEntity } from './entities/offer.entity';
 import { InvoiceEntity } from './entities/invoice.entity';
+import { InventoryTransactionEntity } from './entities/inventory-transaction.entity';
 
 const entities = [
   Customer, Vehicle, JobCardEntity, VehicleBrandEntity, VehicleModelEntity,
   SparePartEntity, ServiceEntity, JobSpareItemEntity, JobServiceItemEntity,
   EmployeeEntity, InventoryBatchEntity, CustomerSourceEntity, GarageEntity,
   JobComplaintEntity, PackageEntity, PackageItemEntity, OfferEntity, InvoiceEntity,
+  InventoryTransactionEntity,
 ];
 
 @Module({

@@ -14,6 +14,9 @@ export class ServiceEntity {
   @Column({ name: 'service_code' })
   serviceCode: string;
 
+  @Column({ nullable: true })
+  category: string;
+
   @Column({ name: 'hsn_sac_code', nullable: true })
   hsnSacCode: string;
 

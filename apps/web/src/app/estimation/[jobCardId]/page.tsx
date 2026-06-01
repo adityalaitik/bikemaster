@@ -313,14 +313,14 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
     loadData();
   }, [jobCardId]);
 
-  // Fetch catalogs dynamically (search as user types)
+  // Fetch catalogs — loads all on mount, filters as user types
   const fetchCatalog = async (q: string) => {
-    if (!q) return;
     try {
       const authHeaders = getAuthHeaders();
+      const qs = q ? `?q=${encodeURIComponent(q)}` : '';
       const [sparesRes, servicesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/spare-parts/search?q=${encodeURIComponent(q)}`, { headers: authHeaders }),
-        fetch(`${API_BASE_URL}/services/search?q=${encodeURIComponent(q)}`, { headers: authHeaders }),
+        fetch(`${API_BASE_URL}/spare-parts/search${qs}`, { headers: authHeaders }),
+        fetch(`${API_BASE_URL}/services/search${qs}`, { headers: authHeaders }),
       ]);
       if (sparesRes.ok) setSparesCatalog(await sparesRes.json());
       if (servicesRes.ok) setServicesCatalog(await servicesRes.json());
