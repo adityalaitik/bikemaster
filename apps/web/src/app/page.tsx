@@ -1389,6 +1389,8 @@ export default function Home() {
         key: `svc-${i}`, name: s.name, total: s.rate, type: "amount" as const, value: 0, isSpare: false,
       }));
       setDiscountForm({ overallType: "amount", overallValue: job.overallDiscount || 0, lineItems: [...spareItems, ...serviceItems] });
+      setSelectedOfferId(null);
+      fetch(`${API_BASE_URL}/offers`).then(r => r.json()).then(data => setAvailableOffers(data || [])).catch(() => setAvailableOffers([]));
       setIsDiscountModalOpen(true);
       return;
     } else if (action === "History") {
@@ -1435,6 +1437,8 @@ export default function Home() {
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+  const [availableOffers, setAvailableOffers] = useState<{ id: string; title: string; description: string; offerType: string; discountValue: number; endDate: string }[]>([]);
+  const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [historyVehicleNo, setHistoryVehicleNo] = useState("");
@@ -9877,6 +9881,77 @@ export default function Home() {
                 <div className="flex flex-1 overflow-hidden min-h-0">
                   {/* LEFT — inputs */}
                   <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+                    {/* Available Offers */}
+                    {availableOffers.length > 0 && (
+                      <div className="rounded-xl border-2 border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-base">🏷️</span>
+                          <div>
+                            <h4 className="text-xs font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest">Available Offers</h4>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Select one offer — it fills the discount automatically</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {availableOffers.map(offer => {
+                            const isSelected = selectedOfferId === offer.id;
+                            const offerAmt = offer.offerType === "percentage"
+                              ? (selectedJob.estimate * offer.discountValue / 100)
+                              : offer.discountValue;
+                            return (
+                              <label
+                                key={offer.id}
+                                className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                                  isSelected
+                                    ? "border-amber-400 bg-amber-50 dark:bg-amber-950/40"
+                                    : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-amber-300"
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="offer"
+                                  className="mt-0.5 accent-amber-500"
+                                  checked={isSelected}
+                                  onChange={() => {
+                                    setSelectedOfferId(offer.id);
+                                    if (offer.offerType === "percentage") {
+                                      setDiscountForm(p => ({ ...p, overallType: "percentage", overallValue: offer.discountValue }));
+                                    } else {
+                                      setDiscountForm(p => ({ ...p, overallType: "amount", overallValue: offer.discountValue }));
+                                    }
+                                  }}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-black text-slate-800 dark:text-white">{offer.title}</span>
+                                    <span className="text-xs font-black text-red-500 shrink-0">
+                                      − ₹{offerAmt.toFixed(0)}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{offer.description}</p>
+                                  <p className="text-[10px] text-slate-400 mt-1">
+                                    {offer.offerType === "percentage" ? `${offer.discountValue}% off` : `₹${offer.discountValue} flat off`}
+                                    {" · "}Valid till {new Date(offer.endDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                  </p>
+                                </div>
+                              </label>
+                            );
+                          })}
+                          {selectedOfferId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedOfferId(null);
+                                setDiscountForm(p => ({ ...p, overallType: "amount", overallValue: 0 }));
+                              }}
+                              className="text-[10px] text-slate-400 hover:text-red-500 transition-colors mt-1"
+                            >
+                              ✕ Clear offer
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Overall Discount Card */}
                     <div className="rounded-xl border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/20 p-4">
