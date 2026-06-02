@@ -1905,15 +1905,25 @@ export default function Home() {
     }
   };
 
+  // Status groupings that map each UI status to a tab bucket
+  const IN_PROGRESS_STATUSES = new Set([
+    "Under Servicing", "Client Agreed", "Work in Progress", "Work on Hold", "Work Completed", "Draft",
+  ]);
+  const READY_STATUSES = new Set([
+    "Ready for Delivery", "Out for Delivery", "Next Day Delivery", "Upcoming Delivery",
+  ]);
+  const PAYMENT_STATUSES = new Set(["Payment Processing"]);
+  const COMPLETED_STATUSES = new Set(["Completed", "Delivered"]);
+
   // Filtering Logic
   const filteredJobs = jobs
     .filter((job) => {
       // 1. Status Filter
       if (activeFilter !== "All Jobs") {
-        if (activeFilter === "Under Servicing" && job.status !== "Under Servicing") return false;
-        if (activeFilter === "Ready for Delivery" && job.status !== "Ready for Delivery") return false;
-        if (activeFilter === "Payment Processing" && job.status !== "Payment Processing") return false;
-        if (activeFilter === "Completed" && job.status !== "Completed") return false;
+        if (activeFilter === "Under Servicing" && !IN_PROGRESS_STATUSES.has(job.status)) return false;
+        if (activeFilter === "Ready for Delivery" && !READY_STATUSES.has(job.status)) return false;
+        if (activeFilter === "Payment Processing" && !PAYMENT_STATUSES.has(job.status)) return false;
+        if (activeFilter === "Completed" && !COMPLETED_STATUSES.has(job.status)) return false;
       }
       // 2. Search query (regex or search string matches Customer name, Phone, or Vehicle No)
       if (searchQuery.trim().length > 0) {
@@ -1928,13 +1938,13 @@ export default function Home() {
     })
     .sort((a, b) => b.id.localeCompare(a.id));
 
-  // Calculate quick stats for filters
+  // Calculate quick stats for filters — every status maps to exactly one tab
   const stats = {
     all: jobs.length,
-    underServicing: jobs.filter((j) => j.status === "Under Servicing").length,
-    ready: jobs.filter((j) => j.status === "Ready for Delivery").length,
-    payment: jobs.filter((j) => j.status === "Payment Processing").length,
-    completed: jobs.filter((j) => j.status === "Completed").length
+    underServicing: jobs.filter((j) => IN_PROGRESS_STATUSES.has(j.status)).length,
+    ready: jobs.filter((j) => READY_STATUSES.has(j.status)).length,
+    payment: jobs.filter((j) => PAYMENT_STATUSES.has(j.status)).length,
+    completed: jobs.filter((j) => COMPLETED_STATUSES.has(j.status)).length,
   };
 
   // -------------------------------------------------------------
@@ -4393,7 +4403,7 @@ export default function Home() {
             <div className="flex-1 py-4 space-y-1 px-3 overflow-y-auto min-h-0">
               {[
                 { name: "Dashboard", icon: Gauge, count: 0 },
-                { name: "Service Queue", icon: Sliders, count: stats.underServicing + stats.ready },
+                { name: "Service Queue", icon: Sliders, count: stats.all - stats.completed },
                 { name: "BI Analytics", icon: TrendingUp, count: 0 },
                 { name: "Customers", icon: User, count: 0 },
                 { name: "Payments", icon: CreditCard, count: 0 },
@@ -4641,10 +4651,10 @@ export default function Home() {
               <div className="flex flex-wrap gap-2 border-b border-slate-200 dark:border-slate-800 pb-4">
                 {[
                   { label: "All Jobs", count: stats.all },
-                  { label: "Under Servicing", count: stats.underServicing },
-                  { label: "Ready for Delivery", count: stats.ready },
+                  { label: "Under Servicing", count: stats.underServicing, hint: "Includes Client Agreed, WIP, On Hold, Work Completed" },
+                  { label: "Ready for Delivery", count: stats.ready, hint: "Includes Out for Delivery" },
                   { label: "Payment Processing", count: stats.payment },
-                  { label: "Completed", count: stats.completed }
+                  { label: "Completed", count: stats.completed, hint: "Includes Delivered" }
                 ].map((filter) => {
                   const isActive = activeFilter === filter.label;
                   return (
