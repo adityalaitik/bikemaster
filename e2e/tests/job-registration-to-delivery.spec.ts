@@ -50,7 +50,8 @@ test.describe('Job Lifecycle: Registration → Delivery', () => {
   });
 
   test('Step 1 — Register new customer and vehicle', async ({ page }) => {
-    await page.getByRole('button', { name: /new registration|new customer/i }).first().click();
+    // Scope to header to avoid SHORTCUTS dropdown "Register Customer" button
+    await page.locator('header').getByRole('button', { name: /new registration/i }).click();
     await expect(page.getByText('New Customer & Vehicle Check-In')).toBeVisible({ timeout: 5000 });
 
     await page.getByPlaceholder(/aditya pradhan/i).fill(CUSTOMER.name);
@@ -89,8 +90,8 @@ test.describe('Job Lifecycle: Registration → Delivery', () => {
     await mainBtn(page, /jc\/est/i).click();
     await expect(page).toHaveURL(/\/estimation\//);
 
-    // Search and add a spare part using the + button next to a catalog item
-    const firstAddBtn = page.locator('button').filter({ hasText: /^\+$/ }).first();
+    // Catalog + buttons use SVG <Plus> icon — match by class, not text content
+    const firstAddBtn = page.locator('button[class*="green-500/10"]').first();
     if (await firstAddBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await firstAddBtn.click();
       await page.waitForTimeout(400);
@@ -184,8 +185,8 @@ test('Full lifecycle smoke test — Registration to Delivered', async ({ page })
   await mainBtn(page, /jc\/est/i).click();
   await expect(page).toHaveURL(/\/estimation\//);
   await expect(page.getByText(/estimation workspace/i).first()).toBeVisible({ timeout: 8000 });
-  // Add first spare from catalog
-  const firstAddBtn = page.locator('button').filter({ hasText: /^\+$/ }).first();
+  // Add first spare from catalog (SVG icon buttons — match by class)
+  const firstAddBtn = page.locator('button[class*="green-500/10"]').first();
   if (await firstAddBtn.isVisible({ timeout: 2000 }).catch(() => false)) await firstAddBtn.click();
   // Back to queue
   await goToServiceQueue(page);

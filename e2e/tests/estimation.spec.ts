@@ -36,8 +36,8 @@ test.describe('Estimation Page', () => {
     await expect(page).toHaveURL(/\/estimation\//, { timeout: 10000 });
     await expect(page.getByText(/estimation workspace/i).first()).toBeVisible({ timeout: 10000 });
 
-    // The catalog section lists spare parts — look for + buttons (one per catalog item)
-    const addBtns = page.locator('button').filter({ hasText: /^\+$/ });
+    // Catalog + buttons use an SVG <Plus> icon — match by class since there's no text content
+    const addBtns = page.locator('button[class*="green-500/10"]');
     await expect(addBtns.first()).toBeVisible({ timeout: 8000 });
 
     const count = await addBtns.count();
@@ -57,8 +57,8 @@ test.describe('Estimation Page', () => {
       .count()
       .catch(() => 0);
 
-    // Click the first + button in the catalog
-    const firstAddBtn = page.locator('button').filter({ hasText: /^\+$/ }).first();
+    // Click the first + button in the catalog (SVG icon buttons — match by class)
+    const firstAddBtn = page.locator('button[class*="green-500/10"]').first();
     await expect(firstAddBtn).toBeVisible({ timeout: 8000 });
     await firstAddBtn.click();
     await page.waitForTimeout(500);
@@ -83,8 +83,8 @@ test.describe('Estimation Page', () => {
     await expect(page).toHaveURL(/\/estimation\//, { timeout: 10000 });
     await expect(page.getByText(/estimation workspace/i).first()).toBeVisible({ timeout: 10000 });
 
-    // Add a spare if catalog is available
-    const firstAddBtn = page.locator('button').filter({ hasText: /^\+$/ }).first();
+    // Add a spare if catalog is available (SVG icon buttons — match by class)
+    const firstAddBtn = page.locator('button[class*="green-500/10"]').first();
     if (await firstAddBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await firstAddBtn.click();
       await page.waitForTimeout(400);
@@ -119,8 +119,8 @@ test.describe('Estimation Page', () => {
 
     const estimationUrl = page.url();
 
-    // Add a spare
-    const firstAddBtn = page.locator('button').filter({ hasText: /^\+$/ }).first();
+    // Add a spare (SVG icon buttons — match by class)
+    const firstAddBtn = page.locator('button[class*="green-500/10"]').first();
     const catalogVisible = await firstAddBtn.isVisible({ timeout: 3000 }).catch(() => false);
     if (!catalogVisible) {
       test.skip(true, 'Catalog not visible — skipping persistence test');
