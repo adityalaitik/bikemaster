@@ -4735,9 +4735,10 @@ export default function Home() {
                   {filteredJobs.map((job) => {
                     const isSelected = selectedJob && selectedJob.id === job.id;
                     return (
-                      <div 
-                        key={job.id} 
+                      <div
+                        key={job.id}
                         onClick={() => {
+                          setExpandedCardId(job.id);
                           setSelectedJob(job);
                           setIsSidePanelOpen(true);
                         }}
@@ -4876,52 +4877,29 @@ export default function Home() {
                               <span className="text-[9px] font-black uppercase tracking-tighter text-slate-500 dark:text-slate-400">{action.label}</span>
                             </button>
                           ));
+                          /* Always compact single row — side panel opens for details */
                           return (
                             <div className="bg-white dark:bg-slate-900 px-6 py-3">
-                              {isExpanded ? (
-                                /* Expanded: two rows */
-                                <div className="flex flex-col gap-3">
-                                  <div className="flex items-center gap-x-8 flex-wrap gap-y-2">
-                                    {infoFields}
-                                  </div>
-                                  <div className="flex items-center gap-x-5 flex-wrap gap-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
-                                    {actionButtons}
-                                    <div className="relative flex items-center justify-center shrink-0 ml-2">
-                                      <svg className="w-12 h-12 transform -rotate-90">
-                                        <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
-                                        <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
-                                          strokeDasharray={125.7}
-                                          strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
-                                          strokeLinecap="round"
-                                        />
-                                      </svg>
-                                      <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
-                                    </div>
+                              <div className="flex items-center w-full min-w-0">
+                                <div className="flex items-center gap-x-6 flex-1 min-w-0 overflow-hidden">
+                                  {infoFields}
+                                </div>
+                                <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 shrink-0 mx-4" />
+                                <div className="flex items-center gap-x-4 shrink-0">
+                                  {actionButtons}
+                                  <div className="relative flex items-center justify-center shrink-0">
+                                    <svg className="w-12 h-12 transform -rotate-90">
+                                      <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
+                                      <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
+                                        strokeDasharray={125.7}
+                                        strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
+                                        strokeLinecap="round"
+                                      />
+                                    </svg>
+                                    <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
                                   </div>
                                 </div>
-                              ) : (
-                                /* Collapsed: single row — left half info | divider | right half actions + progress */
-                                <div className="flex items-center w-full">
-                                  <div className="flex items-center gap-x-6 w-1/2">
-                                    {infoFields}
-                                  </div>
-                                  <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 shrink-0 mx-4" />
-                                  <div className="flex items-center gap-x-5 w-1/2">
-                                    {actionButtons}
-                                    <div className="relative flex items-center justify-center shrink-0 ml-2">
-                                      <svg className="w-12 h-12 transform -rotate-90">
-                                        <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
-                                        <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
-                                          strokeDasharray={125.7}
-                                          strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
-                                          strokeLinecap="round"
-                                        />
-                                      </svg>
-                                      <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
+                              </div>
                             </div>
                           );
                         })()}
