@@ -210,8 +210,10 @@ export class AppService {
   }
 
   // ── Packages ──────────────────────────────────────────────────────────────
-  async getPackages(): Promise<PackageDto[]> {
-    const pkgs = await this.packageRepo.find({ where: { isActive: true } });
+  async getPackages(garageId?: string): Promise<PackageDto[]> {
+    const where: any = { isActive: true };
+    if (garageId) where.garageId = garageId;
+    const pkgs = await this.packageRepo.find({ where });
     if (!pkgs.length) return [];
 
     const pkgIds = pkgs.map(p => p.id);
@@ -249,19 +251,22 @@ export class AppService {
   }
 
   // ── Offers ────────────────────────────────────────────────────────────────
-  async getOffers(): Promise<OfferDto[]> {
+  async getOffers(garageId?: string): Promise<OfferDto[]> {
     const today = new Date().toISOString().split('T')[0];
-    const rows = await this.offerRepo
+    const qb = this.offerRepo
       .createQueryBuilder('o')
-      .where('o.isActive = true AND o.endDate >= :today', { today })
-      .getMany();
+      .where('o.isActive = true AND o.endDate >= :today', { today });
+    if (garageId) qb.andWhere('o.garageId = :garageId', { garageId });
+    const rows = await qb.getMany();
     return rows.map(o => ({ id: o.id, title: o.title, description: o.description || '', offerType: o.offerType, discountValue: Number(o.discountValue), endDate: o.endDate?.toString() || '' }));
   }
 
   // ── Add Spare Part to Master ───────────────────────────────────────────────
-  async addSparePartToMaster(data: any): Promise<SparePartMaster> {
-    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
-    const garageId = garage?.id || '';
+  async addSparePartToMaster(data: any, garageId?: string): Promise<SparePartMaster> {
+    if (!garageId) {
+      const garage = await this.garageRepo.findOne({ where: { isActive: true } });
+      garageId = garage?.id || '';
+    }
     const part = await this.sparesRepo.save(this.sparesRepo.create({ garageId, partName: data.name, partNumber: data.partNo, hsnCode: data.hsn || 'N/A' }));
     const batch = await this.batchRepo.save(this.batchRepo.create({
       sparePartId: part.id, garageId, batchNo: `BATCH-${Date.now()}`,
@@ -272,9 +277,11 @@ export class AppService {
   }
 
   // ── Add Service to Master ─────────────────────────────────────────────────
-  async addServiceToMaster(data: any): Promise<ServiceMaster> {
-    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
-    const garageId = garage?.id || '';
+  async addServiceToMaster(data: any, garageId?: string): Promise<ServiceMaster> {
+    if (!garageId) {
+      const garage = await this.garageRepo.findOne({ where: { isActive: true } });
+      garageId = garage?.id || '';
+    }
     const sv = await this.servicesRepo.save(this.servicesRepo.create({ 
       garageId, 
       serviceName: data.name, 
@@ -304,7 +311,7 @@ export class AppService {
   }
 
   // ── Generate Invoice ──────────────────────────────────────────────────────
-  async generateInvoice(jobCardNo: string, data: any): Promise<InvoiceDto> {
+  async generateInvoice(jobCardNo: string, data: any, garageId?: string): Promise<InvoiceDto> {
     const jc = await this.jobCardRepo.findOneBy({ jobCardNo });
     if (!jc) throw new NotFoundException(`Job card ${jobCardNo} not found`);
 
@@ -322,9 +329,10 @@ export class AppService {
       }
     }
 
-    const count = await this.invoiceRepo.count();
-    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
-    const garageCode = garage?.code?.split('-')[0] || 'BBR';
+    const resolvedGarageId = garageId || jc.garageId;
+    const count = await this.invoiceRepo.countBy({ garageId: resolvedGarageId });
+    const garage = resolvedGarageId ? await this.garageRepo.findOneBy({ id: resolvedGarageId }) : await this.garageRepo.findOne({ where: { isActive: true } });
+    const garageCode = garage?.code?.split('-')[0] || 'WMS';
     const year = new Date().getFullYear();
     const invoiceNo = `INV-${garageCode}-${year}-${String(count + 1).padStart(5, '0')}`;
 
@@ -349,10 +357,10 @@ export class AppService {
     return { invoiceNo: invoiceData.invoiceNo, jobCardNo, customerName: customer?.name || 'Customer', vehicleNo: vehicle?.registrationNo || 'N/A', brandModel, subtotal, discountAmount, taxAmount, totalAmount, customerAmount, insuranceAmount };
   }
 
-  async getInvoices(): Promise<InvoiceReportDto[]> {
-    const invoices = await this.invoiceRepo.find({
-      order: { createdAt: 'DESC' }
-    });
+  async getInvoices(garageId?: string): Promise<InvoiceReportDto[]> {
+    const where: any = {};
+    if (garageId) where.garageId = garageId;
+    const invoices = await this.invoiceRepo.find({ where, order: { createdAt: 'DESC' } });
 
     const reportData: InvoiceReportDto[] = [];
 
@@ -420,15 +428,20 @@ export class AppService {
   }
 
   // ── Employees ─────────────────────────────────────────────────────────────
-  async getEmployees(role?: string): Promise<Employee[]> {
-    const rows = await this.employeeRepo.find({ where: { isActive: true } });
+  async getEmployees(role?: string, garageId?: string): Promise<Employee[]> {
+    const where: any = { isActive: true };
+    if (garageId) where.garageId = garageId;
+    const rows = await this.employeeRepo.find({ where });
     const mapped = rows.map(r => ({ id: r.id, name: r.name, role: EMPLOYEE_TYPE_TO_ROLE[r.type] || r.type }));
     return role ? mapped.filter(e => e.role === role) : mapped;
   }
 
   // ── Spare Parts ───────────────────────────────────────────────────────────
-  async getSpareParts(query?: string): Promise<SparePartMaster[]> {
-    const qb = this.sparesRepo.createQueryBuilder('sp').where('sp.isActive = true');
+  async getSpareParts(query?: string, garageId?: string): Promise<SparePartMaster[]> {
+    if (!garageId) return [];
+    const qb = this.sparesRepo.createQueryBuilder('sp')
+      .where('sp.isActive = true')
+      .andWhere('sp.garageId = :garageId', { garageId });
     if (query) qb.andWhere('(sp.partName LIKE :q OR sp.partNumber LIKE :q)', { q: `%${query}%` });
     const parts = await qb.getMany();
     if (!parts.length) return [];
@@ -461,8 +474,9 @@ export class AppService {
     });
   }
 
-  async getInventoryStockSummary(): Promise<InventoryStockDto[]> {
-    const parts = await this.sparesRepo.find({ where: { isActive: true } });
+  async getInventoryStockSummary(garageId?: string): Promise<InventoryStockDto[]> {
+    if (!garageId) return [];
+    const parts = await this.sparesRepo.find({ where: { isActive: true, garageId } });
     if (!parts.length) return [];
 
     const partIds = parts.map(p => p.id);
@@ -516,8 +530,11 @@ export class AppService {
   }
 
   // ── Services Master ───────────────────────────────────────────────────────
-  async getServicesMaster(query?: string): Promise<ServiceMaster[]> {
-    const qb = this.servicesRepo.createQueryBuilder('sv').where('sv.isActive = true');
+  async getServicesMaster(query?: string, garageId?: string): Promise<ServiceMaster[]> {
+    if (!garageId) return [];
+    const qb = this.servicesRepo.createQueryBuilder('sv')
+      .where('sv.isActive = true')
+      .andWhere('sv.garageId = :garageId', { garageId });
     if (query) qb.andWhere('(sv.serviceName LIKE :q OR sv.serviceCode LIKE :q)', { q: `%${query}%` });
     const rows = await qb.getMany();
     return rows.map(r => ({ 
@@ -531,15 +548,19 @@ export class AppService {
   }
 
   // ── Customer Sources ──────────────────────────────────────────────────────
-  async getCustomerSources(): Promise<string[]> {
-    const rows = await this.sourceRepo.find({ where: { isActive: true } });
+  async getCustomerSources(garageId?: string): Promise<string[]> {
+    const where: any = { isActive: true };
+    if (garageId) where.garageId = garageId;
+    const rows = await this.sourceRepo.find({ where });
     return rows.map(r => r.name);
   }
 
   // ── Save Spare Items ──────────────────────────────────────────────────────
-  async saveSpareItems(jobCardId: string, items: any[]) {
-    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
-    const garageId = garage?.id || '';
+  async saveSpareItems(jobCardId: string, items: any[], garageId?: string) {
+    if (!garageId) {
+      const garage = await this.garageRepo.findOne({ where: { isActive: true } });
+      garageId = garage?.id || '';
+    }
 
     // Restore batch qty for any existing issue transactions on this job card
     const existingTxns = await this.txnRepo.find({
@@ -620,10 +641,12 @@ export class AppService {
   }
 
   // ── Job Cards List (batch-fetches all related data — no N+1) ─────────────
-  async getJobCards(status?: string, search?: string): Promise<JobCard[]> {
+  async getJobCards(status?: string, search?: string, garageId?: string): Promise<JobCard[]> {
+    if (!garageId) return [];
     const qb = this.jobCardRepo.createQueryBuilder('jc')
       .where('jc.isDeleted = :deleted', { deleted: false })
-      .andWhere('jc.status != :del', { del: 'deleted' });
+      .andWhere('jc.status != :del', { del: 'deleted' })
+      .andWhere('jc.garageId = :garageId', { garageId });
 
     if (status && status !== 'All Jobs') {
       const dbStatus = STATUS_TO_DB[status] || status.toLowerCase().replace(/ /g, '_');
@@ -712,17 +735,19 @@ export class AppService {
   }
 
   // ── Create Job Card ───────────────────────────────────────────────────────
-  async createJobCard(data: any): Promise<JobCard> {
-    // Resolve garage from DB (use first active garage)
-    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
-    const garageId = garage?.id || '';
+  async createJobCard(data: any, garageId?: string): Promise<JobCard> {
+    // Resolve garage — prefer the passed garageId, fall back to first active
+    const garage = garageId
+      ? await this.garageRepo.findOneBy({ id: garageId })
+      : await this.garageRepo.findOne({ where: { isActive: true } });
+    const resolvedGarageId = garage?.id || garageId || '';
     const organizationId = garage?.organizationId || '';
 
     // 1. Ensure Customer exists
     let customer = await this.customerRepo.findOneBy({ phone: data.phone });
     if (!customer) {
       customer = await this.customerRepo.save(this.customerRepo.create({
-        garageId, name: data.customerName || 'New Customer', phone: data.phone || '0000000000', customerType: 'individual',
+        garageId: resolvedGarageId, name: data.customerName || 'New Customer', phone: data.phone || '0000000000', customerType: 'individual',
       }));
     }
 
@@ -744,8 +769,8 @@ export class AppService {
       }));
     }
 
-    // 4. Generate job card number (padded, collision-safe)
-    const count = await this.jobCardRepo.count();
+    // 4. Generate job card number — branch-scoped sequence to avoid cross-branch collisions
+    const count = await this.jobCardRepo.countBy({ garageId: resolvedGarageId });
     const garageCode = garage?.code?.split('-')[0] || 'WMS';
     const year = new Date().getFullYear();
     const jobCardNo = `JC-${garageCode}-${year}-${String(count + 1).padStart(5, '0')}`;
@@ -756,7 +781,7 @@ export class AppService {
     };
 
     const saved = await this.jobCardRepo.save(this.jobCardRepo.create({
-      jobCardNo, garageId, vehicleId: vehicle.id, customerId: customer.id,
+      jobCardNo, garageId: resolvedGarageId, vehicleId: vehicle.id, customerId: customer.id,
       odometerIn: data.kms || 0, status: 'under_servicing',
       serviceType: serviceTypeMap[data.serviceType] || 'regular',
       customerComplaints: JSON.stringify(data.complaints || []),
@@ -818,21 +843,24 @@ export class AppService {
   }
 
   // ── Stats ─────────────────────────────────────────────────────────────────
-  async getStats() {
+  async getStats(garageId?: string) {
+    const base: any = { isDeleted: false };
+    if (garageId) base.garageId = garageId;
+
     const [total, underServicing, ready, payment, completed] = await Promise.all([
-      this.jobCardRepo.countBy({ isDeleted: false }),
-      this.jobCardRepo.countBy({ isDeleted: false, status: 'under_servicing' }),
-      this.jobCardRepo.countBy({ isDeleted: false, status: 'ready_for_delivery' }),
-      this.jobCardRepo.countBy({ isDeleted: false, status: 'payment_processing' }),
-      this.jobCardRepo.countBy({ isDeleted: false, status: 'completed' }),
+      this.jobCardRepo.countBy({ ...base }),
+      this.jobCardRepo.countBy({ ...base, status: 'under_servicing' }),
+      this.jobCardRepo.countBy({ ...base, status: 'ready_for_delivery' }),
+      this.jobCardRepo.countBy({ ...base, status: 'payment_processing' }),
+      this.jobCardRepo.countBy({ ...base, status: 'completed' }),
     ]);
 
-    // Sum revenue from actual completed job spare + service items
-    const revenueRow = await this.jobCardRepo
+    const revenueQb = this.jobCardRepo
       .createQueryBuilder('jc')
-      .select('SUM(jc.overallDiscount)', 'discount')  // placeholder until payment table is added
-      .where('jc.status = :s AND jc.isDeleted = false', { s: 'completed' })
-      .getRawOne();
+      .select('SUM(jc.overallDiscount)', 'discount')
+      .where('jc.status = :s AND jc.isDeleted = false', { s: 'completed' });
+    if (garageId) revenueQb.andWhere('jc.garageId = :garageId', { garageId });
+    const revenueRow = await revenueQb.getRawOne();
 
     return { total, underServicing, ready, payment, completed, revenue: Number(revenueRow?.discount) || 0 };
   }

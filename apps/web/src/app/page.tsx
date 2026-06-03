@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Shield,
@@ -48,6 +48,10 @@ import {
 } from "lucide-react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
+// apiFetch is defined as a useCallback inside the component (see below).
+// This module-level placeholder is never called — the real one is used via closure.
+// (apiFetch helper added as useCallback after state declarations)
 
 interface Complaint {
   text: string;
@@ -393,8 +397,20 @@ export default function Home() {
   const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [currentUser, setCurrentUser] = useState<{
-    id: string; name: string; username: string; role: string; garageCode: string; token: string;
-  } | null>({ id: "u1", name: "Aditya Pradhan", username: "admin", role: "super_admin", garageCode: "BBR-001", token: "bypass" });
+    id: string; name: string; username: string; role: string;
+    garageCode: string; garageId: string; garageName?: string; token: string;
+  } | null>({ id: "u1", name: "Aditya Pradhan", username: "admin", role: "super_admin",
+    garageCode: "BBR-001", garageId: "11111111-1111-1111-1111-111111111111", token: "bypass" });
+
+  // Branch picker state — shown when a multi-branch user logs in
+  const [pendingBranchUser, setPendingBranchUser] = useState<{
+    userId: string; name: string; username: string; role: string;
+    garages: Array<{ garageId: string; garageCode: string; garageName: string }>;
+  } | null>(null);
+  const [showBranchPicker, setShowBranchPicker] = useState(false);
+
+  // Ref that mirrors currentUser so non-hook helpers can read it synchronously
+  const currentUserRef = useRef(currentUser);
 
   // Restore session from localStorage on mount
   useEffect(() => {
@@ -403,14 +419,22 @@ export default function Home() {
       if (saved) {
         try {
           const session = JSON.parse(saved);
-          setCurrentUser(session);
-          setIsLoggedIn(true);
+          // Guard: old sessions without garageId must re-authenticate
+          if (!session.garageId) {
+            localStorage.removeItem("bikemaster_session");
+          } else {
+            setCurrentUser(session);
+            setIsLoggedIn(true);
+          }
         } catch {
           localStorage.removeItem("bikemaster_session");
         }
       }
     }
   }, []);
+
+  // Keep ref in sync so apiFetch can read garageId without stale closure
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
 
   // Expandable Sidebar accordions states
   const [isReportsExpanded, setIsReportsExpanded] = useState(false);
@@ -492,7 +516,7 @@ export default function Home() {
   useEffect(() => {
     const fetchInvoices = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/invoices`);
+        const res = await apiFetch(`/invoices`);
         if (res.ok) {
           const data = await res.json();
           setInvoices(data);
@@ -508,7 +532,7 @@ export default function Home() {
   useEffect(() => {
     const fetchInventory = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/spare-parts/stock-summary`);
+        const res = await apiFetch(`/spare-parts/stock-summary`);
         if (res.ok) {
           const data = await res.json();
           setInventoryStockSummary(data);
@@ -526,7 +550,7 @@ export default function Home() {
   useEffect(() => {
     const fetchServices = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/services-master`);
+        const res = await apiFetch(`/services-master`);
         if (res.ok) {
           const data = await res.json();
           const mapped = data.map((s: any) => ({
@@ -1317,7 +1341,7 @@ export default function Home() {
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/job-cards?status=${activeFilter}&search=${searchQuery}`);
+        const res = await apiFetch(`/job-cards?status=${activeFilter}&search=${searchQuery}`);
         if (res.ok) {
           const data = await res.json();
           setJobs(data);
@@ -1340,7 +1364,7 @@ export default function Home() {
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/employees`);
+        const res = await apiFetch(`/employees`);
         if (res.ok) {
           const data = await res.json();
           const techs = data.filter((e: any) => e.role === 'technician').map((e: any) => e.name);
@@ -1356,7 +1380,7 @@ export default function Home() {
   }, []);
   // Progress and Action Handlers
   const handleJobAction = async (job: JobCard, action: string) => {
-    let updates: Partial<JobCard> = {};
+    const updates: Partial<JobCard> = {};
     const currentProgress = job.completion;
 
     if (action === "Status") {
@@ -1390,7 +1414,7 @@ export default function Home() {
       }));
       setDiscountForm({ overallType: "amount", overallValue: job.overallDiscount || 0, lineItems: [...spareItems, ...serviceItems] });
       setSelectedOfferId(null);
-      fetch(`${API_BASE_URL}/offers`).then(r => r.json()).then(data => setAvailableOffers(data || [])).catch(() => setAvailableOffers([]));
+      apiFetch(`/offers`).then(r => r.json()).then(data => setAvailableOffers(data || [])).catch(() => setAvailableOffers([]));
       setIsDiscountModalOpen(true);
       return;
     } else if (action === "History") {
@@ -1399,7 +1423,7 @@ export default function Home() {
       setIsHistoryModalOpen(true);
       setHistoryLoading(true);
       try {
-        const res = await fetch(`${API_BASE_URL}/vehicles/${encodeURIComponent(job.vehicleNo)}/history`);
+        const res = await apiFetch(`/vehicles/${encodeURIComponent(job.vehicleNo)}/history`);
         if (res.ok) setHistoryRows(await res.json());
       } catch { /* show empty */ }
       setHistoryLoading(false);
@@ -1407,14 +1431,14 @@ export default function Home() {
     } else if (action === "Invoice") {
       setSelectedJob(job);
       setIsInvoiceModalOpen(true);
-      fetch(`${API_BASE_URL}/job-cards/${job.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completion: 95 }) }).then(r => r.ok && r.json()).then(u => u && setJobs(prev => prev.map(j => j.id === u.id ? u : j))).catch(() => setJobs(prev => prev.map(j => j.id === job.id ? { ...j, completion: 95 } : j)));
+      apiFetch(`/job-cards/${job.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completion: 95 }) }).then(r => r.ok && r.json()).then(u => u && setJobs(prev => prev.map(j => j.id === u.id ? u : j))).catch(() => setJobs(prev => prev.map(j => j.id === job.id ? { ...j, completion: 95 } : j)));
       addTimelineEntry(job.id, "Invoice Generated", `Tax invoice prepared for ${job.vehicleNo}`);
       return;
     }
 
     if (Object.keys(updates).length > 0) {
       try {
-        const res = await fetch(`${API_BASE_URL}/job-cards/${job.id}`, {
+        const res = await apiFetch(`/job-cards/${job.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updates)
@@ -1477,7 +1501,7 @@ export default function Home() {
     };
 
     try {
-      const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, {
+      const res = await apiFetch(`/job-cards/${selectedJob.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates)
@@ -1501,7 +1525,7 @@ export default function Home() {
     if (!selectedJob || !selectedStatus) return;
     const updates = { status: selectedStatus, statusNote };
     try {
-      const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, {
+      const res = await apiFetch(`/job-cards/${selectedJob.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -1542,7 +1566,7 @@ export default function Home() {
       due: Math.max(0, selectedJob.estimate - selectedJob.paid - totalDiscount),
     };
     try {
-      const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, {
+      const res = await apiFetch(`/job-cards/${selectedJob.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -1798,7 +1822,7 @@ export default function Home() {
     };
 
     try {
-      const res = await fetch(`${API_BASE_URL}/job-cards`, {
+      const res = await apiFetch(`/job-cards`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -1993,21 +2017,50 @@ export default function Home() {
 
     // Offline fallback users (mirrors API DEMO_USERS)
     const FALLBACK_USERS = [
-      { username: "admin",   password: "admin123",   role: "super_admin",    name: "Aditya Pradhan", id: "u1", garageCode: "BBR-001" },
-      { username: "manager", password: "manager123", role: "garage_manager", name: "Subhashis Sen",  id: "u2", garageCode: "BBR-001" },
-      { username: "advisor", password: "advisor123", role: "service_advisor",name: "Priya Sharma",   id: "u3", garageCode: "BBR-001" },
-      { username: "tech",    password: "tech123",    role: "technician",     name: "Ravi Kumar",     id: "u4", garageCode: "BBR-001" },
-      { username: "cashier", password: "cashier123", role: "cashier",        name: "Anita Das",      id: "u5", garageCode: "BBR-001" },
+      { username: "admin",        password: "admin123",   role: "super_admin",    name: "Aditya Pradhan", id: "u1",
+        garageCode: "BBR-001", garageId: "11111111-1111-1111-1111-111111111111", garageName: "Bhubaneswar Branch",
+        garages: [
+          { garageId: "11111111-1111-1111-1111-111111111111", garageCode: "BBR-001", garageName: "Bhubaneswar Branch" },
+          { garageId: "33333333-3333-3333-3333-000000000001", garageCode: "PTI-003", garageName: "Patia Branch" },
+        ] },
+      { username: "manager",      password: "manager123", role: "garage_manager",  name: "Subhashis Sen",  id: "u2",
+        garageCode: "BBR-001", garageId: "11111111-1111-1111-1111-111111111111", garageName: "Bhubaneswar Branch", garages: [] },
+      { username: "advisor",      password: "advisor123", role: "service_advisor", name: "Priya Sharma",   id: "u3",
+        garageCode: "BBR-001", garageId: "11111111-1111-1111-1111-111111111111", garageName: "Bhubaneswar Branch", garages: [] },
+      { username: "tech",         password: "tech123",    role: "technician",      name: "Ravi Kumar",     id: "u4",
+        garageCode: "BBR-001", garageId: "11111111-1111-1111-1111-111111111111", garageName: "Bhubaneswar Branch", garages: [] },
+      { username: "cashier",      password: "cashier123", role: "cashier",         name: "Anita Das",      id: "u5",
+        garageCode: "BBR-001", garageId: "11111111-1111-1111-1111-111111111111", garageName: "Bhubaneswar Branch", garages: [] },
+      // ── Patia branch ─────────────────────────────────────────────────────────
+      { username: "manager.ptia", password: "manager123", role: "garage_manager",  name: "Deepak Mohanty", id: "u6",
+        garageCode: "PTI-003", garageId: "33333333-3333-3333-3333-000000000001", garageName: "Patia Branch", garages: [] },
+      { username: "advisor.ptia", password: "advisor123", role: "service_advisor", name: "Sneha Pattnaik", id: "u7",
+        garageCode: "PTI-003", garageId: "33333333-3333-3333-3333-000000000001", garageName: "Patia Branch", garages: [] },
+      { username: "tech.ptia",    password: "tech123",    role: "technician",      name: "Bikash Nayak",   id: "u8",
+        garageCode: "PTI-003", garageId: "33333333-3333-3333-3333-000000000001", garageName: "Patia Branch", garages: [] },
+      { username: "cashier.ptia", password: "cashier123", role: "cashier",         name: "Kavita Rath",    id: "u9",
+        garageCode: "PTI-003", garageId: "33333333-3333-3333-3333-000000000001", garageName: "Patia Branch", garages: [] },
     ];
 
-    const saveSession = (user: typeof FALLBACK_USERS[0], token: string) => {
-      const session = { ...user, token };
+    const saveSession = (user: { id: string; name: string; username: string; role: string; garageCode: string; garageId: string; garageName?: string }, token: string) => {
+      const session = { id: user.id, name: user.name, username: user.username, role: user.role,
+        garageCode: user.garageCode, garageId: user.garageId, garageName: user.garageName, token };
       setCurrentUser(session);
       setIsLoggedIn(true);
       localStorage.setItem("bikemaster_session", JSON.stringify(session));
       // Set first allowed tab for this role
       const allowed = ROLE_TABS[user.role] ?? [];
       if (!allowed.includes("*") && allowed.length > 0) setActiveTab(allowed[0]);
+    };
+
+    const handleFallbackLogin = (match: typeof FALLBACK_USERS[0], offline = false) => {
+      if (match.garages && match.garages.length > 1) {
+        setPendingBranchUser({ userId: match.id, name: match.name, username: match.username, role: match.role, garages: match.garages });
+        setShowBranchPicker(true);
+      } else {
+        saveSession(match, "offline-token");
+        triggerToast(`Welcome back, ${match.name}!${offline ? " (Offline mode)" : ""}`, "success");
+      }
     };
 
     try {
@@ -2018,16 +2071,21 @@ export default function Home() {
       });
       if (res.ok) {
         const data = await res.json();
-        saveSession(data.user, data.access_token);
-        triggerToast(`Welcome back, ${data.user.name}!`, "success");
+        if (data.requiresBranchSelection) {
+          // Multi-branch user — show picker before issuing JWT
+          setPendingBranchUser({ userId: data.userId, name: data.user.name, username: data.user.username, role: data.user.role, garages: data.garages });
+          setShowBranchPicker(true);
+        } else {
+          saveSession(data.user, data.access_token);
+          triggerToast(`Welcome back, ${data.user.name}!`, "success");
+        }
       } else {
         // API rejected — try local fallback before showing error
         const match = FALLBACK_USERS.find(
           (u) => u.username === usernameInput && u.password === passwordInput,
         );
         if (match) {
-          saveSession(match, "offline-token");
-          triggerToast(`Welcome back, ${match.name}!`, "success");
+          handleFallbackLogin(match);
         } else {
           triggerToast("Invalid username or password.", "warn");
         }
@@ -2038,8 +2096,7 @@ export default function Home() {
         (u) => u.username === usernameInput && u.password === passwordInput,
       );
       if (match) {
-        saveSession(match, "offline-token");
-        triggerToast(`Welcome back, ${match.name}! (Offline mode)`, "success");
+        handleFallbackLogin(match, true);
       } else {
         triggerToast("Invalid credentials.", "warn");
       }
@@ -2054,6 +2111,60 @@ export default function Home() {
     setPasswordInput("");
     triggerToast("Logged out successfully.", "info");
   };
+
+  // ── Branch selection (post-login picker) ──────────────────────────────────
+  const handleBranchSelect = async (garage: { garageId: string; garageCode: string; garageName: string }) => {
+    if (!pendingBranchUser) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/select-branch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: pendingBranchUser.userId, garageId: garage.garageId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const session = { id: data.user.id, name: data.user.name, username: data.user.username,
+          role: data.user.role, garageCode: data.user.garageCode, garageId: data.user.garageId,
+          garageName: data.user.garageName, token: data.access_token };
+        setCurrentUser(session);
+        setIsLoggedIn(true);
+        localStorage.setItem("bikemaster_session", JSON.stringify(session));
+        const allowed = (ROLE_TABS as any)[data.user.role] ?? [];
+        if (!allowed.includes("*") && allowed.length > 0) setActiveTab(allowed[0]);
+      } else {
+        // Offline fallback
+        const session = { id: pendingBranchUser.userId, name: pendingBranchUser.name,
+          username: pendingBranchUser.username, role: pendingBranchUser.role,
+          garageCode: garage.garageCode, garageId: garage.garageId, garageName: garage.garageName,
+          token: "offline-token" };
+        setCurrentUser(session);
+        setIsLoggedIn(true);
+        localStorage.setItem("bikemaster_session", JSON.stringify(session));
+      }
+    } catch {
+      const session = { id: pendingBranchUser.userId, name: pendingBranchUser.name,
+        username: pendingBranchUser.username, role: pendingBranchUser.role,
+        garageCode: garage.garageCode, garageId: garage.garageId, garageName: garage.garageName,
+        token: "offline-token" };
+      setCurrentUser(session);
+      setIsLoggedIn(true);
+      localStorage.setItem("bikemaster_session", JSON.stringify(session));
+    }
+    triggerToast(`Welcome back, ${pendingBranchUser.name}! (${garage.garageName})`, "success");
+    setShowBranchPicker(false);
+    setPendingBranchUser(null);
+  };
+
+  // ── apiFetch — auto-appends ?garageId= to every API call ─────────────────
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const apiFetch = useCallback((path: string, init?: RequestInit): Promise<Response> => {
+    const garageId = currentUserRef.current?.garageId;
+    const separator = path.includes("?") ? "&" : "?";
+    const url = garageId
+      ? `${API_BASE_URL}${path}${separator}garageId=${encodeURIComponent(garageId)}`
+      : `${API_BASE_URL}${path}`;
+    return fetch(url, init);
+  }, []);
 
   // -------------------------------------------------------------
   // HELPER METHODS FOR 20 NEW CONFIG, REPORTS, AND WORKSHOP TABS
@@ -2263,7 +2374,7 @@ export default function Home() {
                                   if (confirm("Are you sure you want to delete this record?")) {
                                     if (activeTab === "Manage Services") {
                                       try {
-                                        await fetch(`${API_BASE_URL}/services-master/${row.id}`, { method: "DELETE" });
+                                        await apiFetch(`/services-master/${row.id}`, { method: "DELETE" });
                                         setList(list.filter((item) => item.id !== row.id));
                                         triggerToast("Service deleted successfully", "success");
                                       } catch (err) {
@@ -4036,6 +4147,44 @@ export default function Home() {
     }
   };
 
+  // ── Branch Picker Modal ───────────────────────────────────────────────────
+  if (showBranchPicker && pendingBranchUser) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center font-sans ${theme === "dark" ? "bg-slate-950" : "bg-slate-50"}`}>
+        <div className={`w-full max-w-md mx-4 rounded-2xl shadow-2xl border p-8 ${theme === "dark" ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200"}`}>
+          <div className="text-center mb-6">
+            <img src="/assets/bike_master_logo.jpg" alt="Bike Masters" className="h-12 w-auto object-contain mx-auto mb-4" />
+            <h2 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Select Branch</h2>
+            <p className={`text-sm mt-1 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Welcome back, {pendingBranchUser.name}</p>
+          </div>
+          <div className="space-y-3">
+            {pendingBranchUser.garages.map((garage) => (
+              <button
+                key={garage.garageId}
+                onClick={() => handleBranchSelect(garage)}
+                className={`w-full flex items-center p-4 rounded-xl border-2 transition-all hover:border-green-500 active:scale-98 text-left ${
+                  theme === "dark" ? "border-slate-700 hover:bg-slate-800 bg-slate-800/50" : "border-slate-200 hover:bg-green-50 bg-slate-50"
+                }`}
+              >
+                <MapPin className="h-5 w-5 text-green-500 mr-3 flex-shrink-0" />
+                <div>
+                  <div className={`font-semibold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{garage.garageName}</div>
+                  <div className={`text-xs font-mono mt-0.5 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{garage.garageCode}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => { setShowBranchPicker(false); setPendingBranchUser(null); }}
+            className={`w-full mt-4 py-2 text-sm rounded-xl transition-colors ${theme === "dark" ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-600"}`}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!isLoggedIn) {
     return (
       <div className={`min-h-screen flex font-sans ${theme === "dark" ? "bg-slate-950" : "bg-slate-50"}`}>
@@ -4249,6 +4398,49 @@ export default function Home() {
           ))}
         </div>
 
+      {/* ── Branch Picker Modal ───────────────────────────────────────────── */}
+      {showBranchPicker && pendingBranchUser && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className={`w-full max-w-sm mx-4 rounded-3xl p-8 shadow-2xl border ${
+            theme === "dark" ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+          }`}>
+            <div className="mb-6 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-green-500/25">
+                <MapPin className="h-7 w-7 text-white" />
+              </div>
+              <h2 className={`text-xl font-black ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Select Branch</h2>
+              <p className={`text-sm mt-1.5 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                Welcome, <span className="font-bold">{pendingBranchUser.name}</span>. Choose a branch to continue.
+              </p>
+            </div>
+            <div className="space-y-3">
+              {pendingBranchUser.garages.map(g => (
+                <button
+                  key={g.garageId}
+                  onClick={() => handleBranchSelect(g)}
+                  className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-left transition-all hover:border-green-500 active:scale-[0.98] ${
+                    theme === "dark"
+                      ? "border-slate-700 bg-slate-900/50 hover:bg-green-900/20"
+                      : "border-slate-200 bg-slate-50 hover:bg-green-50"
+                  }`}
+                >
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    theme === "dark" ? "bg-green-900/40" : "bg-green-100"
+                  }`}>
+                    <MapPin className={`h-5 w-5 ${theme === "dark" ? "text-green-400" : "text-green-600"}`} />
+                  </div>
+                  <div>
+                    <div className={`font-bold text-sm ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{g.garageName}</div>
+                    <div className={`text-xs font-mono mt-0.5 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{g.garageCode}</div>
+                  </div>
+                  <ChevronRight className={`h-4 w-4 ml-auto ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`} />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       </div>
     );
   }
@@ -4291,7 +4483,7 @@ export default function Home() {
               </div>
               <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-700/50 text-xs font-semibold px-2.5 py-1 rounded-full text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
                 <MapPin className="h-3 w-3 mr-1.5 text-green-500" />
-                Bhubaneswar Branch
+                {currentUser?.garageName ?? (currentUser?.garageCode === "PTI-003" ? "Patia Branch" : "Bhubaneswar Branch")}
               </div>
             </div>
 
@@ -4301,7 +4493,7 @@ export default function Home() {
               {/* Branch Selector Pill */}
               <div className="hidden lg:flex items-center space-x-1 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-sm font-medium hover:border-slate-300 dark:hover:border-slate-600 transition-colors cursor-pointer">
                 <span className="text-slate-600 dark:text-slate-300">Active Branch:</span>
-                <span className="text-slate-900 dark:text-white font-semibold">BBR-001</span>
+                <span className="text-slate-900 dark:text-white font-semibold">{currentUser?.garageCode ?? "—"}</span>
                 <ChevronDown className="h-4 w-4 text-slate-500 ml-1" />
               </div>
 
@@ -4826,7 +5018,7 @@ export default function Home() {
                                         e.stopPropagation();
                                         e.preventDefault();
                                         setJobRatings(prev => ({ ...prev, [job.id]: star }));
-                                        fetch(`${API_BASE_URL}/job-cards/${job.id}/rating`, {
+                                        apiFetch(`/job-cards/${job.id}/rating`, {
                                           method: 'PATCH',
                                           headers: { 'Content-Type': 'application/json' },
                                           body: JSON.stringify({ rating: star }),
@@ -4992,7 +5184,7 @@ export default function Home() {
                           onClick={async () => {
                             if (!editedJob) return;
                             try {
-                              const res = await fetch(`${API_BASE_URL}/job-cards/${editedJob.id}`, {
+                              const res = await apiFetch(`/job-cards/${editedJob.id}`, {
                                 method: "PATCH",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify(editedJob)
@@ -5207,7 +5399,7 @@ export default function Home() {
                         <button
                           onClick={async () => {
                             try {
-                              const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completion: 100, actualDeliveryDate: new Date().toISOString() }) });
+                              const res = await apiFetch(`/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completion: 100, actualDeliveryDate: new Date().toISOString() }) });
                               if (res.ok) { const u = await res.json(); setJobs(prev => prev.map(j => j.id === u.id ? u : j)); setSelectedJob(u); }
                             } catch { setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, completion: 100 } : j)); }
                             addTimelineEntry(selectedJob.id, "Gate Pass Issued 🎉", `Vehicle ${selectedJob.vehicleNo} is cleared and ready to roll — safe travels!`);
@@ -5221,7 +5413,7 @@ export default function Home() {
                         <button
                           onClick={async () => {
                             try {
-                              const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "Completed", completion: 90 }) });
+                              const res = await apiFetch(`/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "Completed", completion: 90 }) });
                               if (res.ok) { const u = await res.json(); setJobs(prev => prev.map(j => j.id === u.id ? u : j)); setSelectedJob(u); }
                               addTimelineEntry(selectedJob.id, "Vehicle Ready ✅", `${selectedJob.vehicleNo} — service complete, awaiting customer pickup`);
                               triggerToast("Job completed!", "success");
@@ -5234,7 +5426,7 @@ export default function Home() {
                         <button
                           onClick={async () => {
                             if (!confirm("Delete this job card?")) return;
-                            try { await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "DELETE" }); } catch { }
+                            try { await apiFetch(`/job-cards/${selectedJob.id}`, { method: "DELETE" }); } catch { }
                             setJobs(prev => prev.filter(j => j.id !== selectedJob.id));
                             setSelectedJob(null); setIsSidePanelOpen(false); setExpandedCardId(null);
                             triggerToast("Job Card deleted!", "warn");
@@ -7625,7 +7817,7 @@ export default function Home() {
                       return;
                     }
                     try {
-                      await fetch(`${API_BASE_URL}/vehicle-models`, {
+                      await apiFetch(`/vehicle-models`, {
                         method: "POST",
                         headers: {"Content-Type": "application/json"},
                         body: JSON.stringify({
@@ -7722,7 +7914,7 @@ export default function Home() {
                   onClick={async () => {
                     if (!newSourceName.trim()) return;
                     try {
-                      await fetch(`${API_BASE_URL}/customer-sources`, {
+                      await apiFetch(`/customer-sources`, {
                         method: "POST",
                         headers: {"Content-Type": "application/json"},
                         body: JSON.stringify({ name: newSourceName })
@@ -7771,7 +7963,7 @@ export default function Home() {
                   onClick={async () => {
                     if (!newEmployeeName.trim()) return;
                     try {
-                      await fetch(`${API_BASE_URL}/employees`, {
+                      await apiFetch(`/employees`, {
                         method: "POST",
                         headers: {"Content-Type": "application/json"},
                         body: JSON.stringify({ name: newEmployeeName, role: employeeRoleType })
@@ -9308,8 +9500,8 @@ export default function Home() {
                 const saveService = async () => {
                   try {
                     const method = crudModalMode === "new" ? "POST" : "PATCH";
-                    const url = crudModalMode === "new" ? `${API_BASE_URL}/services-master` : `${API_BASE_URL}/services-master/${crudSelectedId}`;
-                    const res = await fetch(url, {
+                    const url = crudModalMode === "new" ? `/services-master` : `/services-master/${crudSelectedId}`;
+                    const res = await apiFetch(url, {
                       method,
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify(crudForm)

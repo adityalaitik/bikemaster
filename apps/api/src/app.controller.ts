@@ -19,14 +19,14 @@ export class AppController {
   }
 
   @Get('invoices')
-  async getInvoices(): Promise<InvoiceReportDto[]> {
-    return this.appService.getInvoices();
+  async getInvoices(@Query('garageId') garageId?: string): Promise<InvoiceReportDto[]> {
+    return this.appService.getInvoices(garageId);
   }
 
   // ============================================================
   // SPEC 4: CUSTOMER & VEHICLE REGISTRATION
   // ============================================================
-  
+
   @Get('vehicle-brands')
   async getBrands(): Promise<VehicleBrand[]> {
     return this.appService.getBrands();
@@ -38,38 +38,53 @@ export class AppController {
   }
 
   @Get('employees')
-  async getEmployees(@Query('role') role?: string): Promise<Employee[]> {
-    return this.appService.getEmployees(role);
+  async getEmployees(
+    @Query('role') role?: string,
+    @Query('garageId') garageId?: string,
+  ): Promise<Employee[]> {
+    return this.appService.getEmployees(role, garageId);
   }
 
   @Get('spare-parts')
-  async getSpareParts(@Query('q') q?: string): Promise<SparePartMaster[]> {
-    return this.appService.getSpareParts(q);
+  async getSpareParts(
+    @Query('q') q?: string,
+    @Query('garageId') garageId?: string,
+  ): Promise<SparePartMaster[]> {
+    return this.appService.getSpareParts(q, garageId);
   }
 
   @Get('spare-parts/stock-summary')
-  async getStockSummary() {
-    return this.appService.getInventoryStockSummary();
+  async getStockSummary(@Query('garageId') garageId?: string) {
+    return this.appService.getInventoryStockSummary(garageId);
   }
 
   @Get('spare-parts/search')
-  async searchSpareParts(@Query('q') q?: string): Promise<SparePartMaster[]> {
-    return this.appService.getSpareParts(q);
+  async searchSpareParts(
+    @Query('q') q?: string,
+    @Query('garageId') garageId?: string,
+  ): Promise<SparePartMaster[]> {
+    return this.appService.getSpareParts(q, garageId);
   }
 
   @Get('services-master')
-  async getServicesMaster(@Query('q') q?: string): Promise<ServiceMaster[]> {
-    return this.appService.getServicesMaster(q);
+  async getServicesMaster(
+    @Query('q') q?: string,
+    @Query('garageId') garageId?: string,
+  ): Promise<ServiceMaster[]> {
+    return this.appService.getServicesMaster(q, garageId);
   }
 
   @Get('services/search')
-  async searchServices(@Query('q') q?: string): Promise<ServiceMaster[]> {
-    return this.appService.getServicesMaster(q);
+  async searchServices(
+    @Query('q') q?: string,
+    @Query('garageId') garageId?: string,
+  ): Promise<ServiceMaster[]> {
+    return this.appService.getServicesMaster(q, garageId);
   }
 
   @Get('customer-sources')
-  async getCustomerSources(): Promise<string[]> {
-    return this.appService.getCustomerSources();
+  async getCustomerSources(@Query('garageId') garageId?: string): Promise<string[]> {
+    return this.appService.getCustomerSources(garageId);
   }
 
   // ============================================================
@@ -80,13 +95,14 @@ export class AppController {
   async getJobCards(
     @Query('status') status?: string,
     @Query('search') search?: string,
+    @Query('garageId') garageId?: string,
   ): Promise<JobCard[]> {
-    return this.appService.getJobCards(status, search);
+    return this.appService.getJobCards(status, search, garageId);
   }
 
   @Get('job-cards/stats')
-  async getJobCardsStats() {
-    return this.appService.getStats();
+  async getJobCardsStats(@Query('garageId') garageId?: string) {
+    return this.appService.getStats(garageId);
   }
 
   @Get('vehicles/:vehicleNo/history')
@@ -100,8 +116,11 @@ export class AppController {
   }
 
   @Post('job-cards')
-  async createJobCard(@Body() data: Partial<JobCard>): Promise<JobCard> {
-    return this.appService.createJobCard(data);
+  async createJobCard(
+    @Body() data: Partial<JobCard>,
+    @Query('garageId') garageId?: string,
+  ): Promise<JobCard> {
+    return this.appService.createJobCard(data, garageId || (data as any).garageId);
   }
 
   @Patch('job-cards/:id')
@@ -113,8 +132,12 @@ export class AppController {
   }
 
   @Post('job-cards/:id/spare-items')
-  async saveSpareItems(@Param('id') id: string, @Body() body: { items: any[] }) {
-    return this.appService.saveSpareItems(id, body.items);
+  async saveSpareItems(
+    @Param('id') id: string,
+    @Body() body: { items: any[]; garageId?: string },
+    @Query('garageId') garageId?: string,
+  ) {
+    return this.appService.saveSpareItems(id, body.items, garageId || body.garageId);
   }
 
   @Post('job-cards/:id/service-items')
@@ -144,13 +167,13 @@ export class AppController {
   }
 
   @Get('packages')
-  async getPackages(): Promise<PackageDto[]> {
-    return this.appService.getPackages();
+  async getPackages(@Query('garageId') garageId?: string): Promise<PackageDto[]> {
+    return this.appService.getPackages(garageId);
   }
 
   @Get('offers')
-  async getOffers(): Promise<OfferDto[]> {
-    return this.appService.getOffers();
+  async getOffers(@Query('garageId') garageId?: string): Promise<OfferDto[]> {
+    return this.appService.getOffers(garageId);
   }
 
   @Patch('job-cards/:id/rating')
@@ -160,13 +183,19 @@ export class AppController {
   }
 
   @Post('spare-parts')
-  async addSparePart(@Body() data: any): Promise<SparePartMaster> {
-    return this.appService.addSparePartToMaster(data);
+  async addSparePart(
+    @Body() data: any,
+    @Query('garageId') garageId?: string,
+  ): Promise<SparePartMaster> {
+    return this.appService.addSparePartToMaster(data, garageId || data.garageId);
   }
 
   @Post('services-master')
-  async addService(@Body() data: any): Promise<ServiceMaster> {
-    return this.appService.addServiceToMaster(data);
+  async addService(
+    @Body() data: any,
+    @Query('garageId') garageId?: string,
+  ): Promise<ServiceMaster> {
+    return this.appService.addServiceToMaster(data, garageId || data.garageId);
   }
 
   @Patch('services-master/:id')
@@ -180,8 +209,12 @@ export class AppController {
   }
 
   @Post('invoices/generate-pdf/:jobCardId')
-  async generateInvoice(@Param('jobCardId') jobCardId: string, @Body() data: any): Promise<InvoiceDto> {
-    return this.appService.generateInvoice(jobCardId, data);
+  async generateInvoice(
+    @Param('jobCardId') jobCardId: string,
+    @Body() data: any,
+    @Query('garageId') garageId?: string,
+  ): Promise<InvoiceDto> {
+    return this.appService.generateInvoice(jobCardId, data, garageId);
   }
 
   // ============================================================
@@ -192,6 +225,12 @@ export class AppController {
   @Post('auth/login')
   login(@Body() body: { username: string; password: string }) {
     return this.authService.login(body.username, body.password);
+  }
+
+  @Public()
+  @Post('auth/select-branch')
+  selectBranch(@Body() body: { userId: string; garageId: string }) {
+    return this.authService.selectBranch(body.userId, body.garageId);
   }
 
   @Get('auth/me')
