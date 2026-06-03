@@ -221,6 +221,143 @@ export class AppController {
   }
 
   // ============================================================
+  // INVENTORY CRUD
+  // ============================================================
+
+  @Patch('spare-parts/:id')
+  async updateSparePart(@Param('id') id: string, @Body() data: any) {
+    return this.appService.updateSparePart(id, data);
+  }
+
+  @Delete('spare-parts/:id')
+  async deleteSparePart(@Param('id') id: string) {
+    return this.appService.deleteSparePart(id);
+  }
+
+  @Get('spare-parts/low-stock')
+  async getLowStockAlerts(
+    @Query('garageId') garageId?: string,
+    @Query('threshold') threshold?: string,
+  ) {
+    return this.appService.getLowStockAlerts(garageId, threshold ? Number(threshold) : 10);
+  }
+
+  // ============================================================
+  // VEHICLE SEARCH & MASTER DATA
+  // ============================================================
+
+  @Get('vehicles/search')
+  async searchVehicles(@Query('q') q?: string) {
+    return this.appService.searchVehicles(q || '');
+  }
+
+  @Post('vehicle-brands')
+  async addBrand(@Body() data: { name: string }) {
+    return this.appService.addBrand(data);
+  }
+
+  @Post('vehicle-models')
+  async addModel(@Body() data: { brandId: string; name: string; category?: string }) {
+    return this.appService.addModel(data);
+  }
+
+  // ============================================================
+  // CRM
+  // ============================================================
+
+  @Get('crm/followups')
+  async getCrmFollowups(@Query('garageId') garageId?: string) {
+    return this.appService.getCrmFollowups(garageId);
+  }
+
+  @Get('crm/upcoming-services')
+  async getCrmUpcomingServices(@Query('garageId') garageId?: string) {
+    return this.appService.getCrmUpcomingServices(garageId);
+  }
+
+  @Get('crm/dropouts')
+  async getCrmDropouts(@Query('garageId') garageId?: string) {
+    return this.appService.getCrmDropouts(garageId);
+  }
+
+  // ============================================================
+  // ANALYTICS / BI
+  // ============================================================
+
+  @Get('analytics/kpis')
+  async getAnalyticsKpis(
+    @Query('garageId') garageId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.appService.getAnalyticsKpis(garageId, from, to);
+  }
+
+  @Get('analytics/revenue-trend')
+  async getAnalyticsRevenueTrend(@Query('garageId') garageId?: string) {
+    return this.appService.getAnalyticsRevenueTrend(garageId);
+  }
+
+  @Get('analytics/by-service-type')
+  async getAnalyticsByServiceType(@Query('garageId') garageId?: string) {
+    return this.appService.getAnalyticsByServiceType(garageId);
+  }
+
+  // ============================================================
+  // REPORTS
+  // ============================================================
+
+  @Get('reports/invoices')
+  async getReportInvoices(
+    @Query('garageId') garageId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.appService.getReportInvoices(garageId, from, to);
+  }
+
+  @Get('reports/spares-consumption')
+  async getReportSparesConsumption(
+    @Query('garageId') garageId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.appService.getReportSparesConsumption(garageId, from, to);
+  }
+
+  @Get('reports/technician-productivity')
+  async getReportTechnicianProductivity(
+    @Query('garageId') garageId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.appService.getReportTechnicianProductivity(garageId, from, to);
+  }
+
+  @Get('reports/stock-movement')
+  async getReportStockMovement(
+    @Query('garageId') garageId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.appService.getReportStockMovement(garageId, from, to);
+  }
+
+  @Get('reports/customer-sources')
+  async getReportCustomerSources(@Query('garageId') garageId?: string) {
+    return this.appService.getReportCustomerSources(garageId);
+  }
+
+  @Get('reports/day-book')
+  async getReportDayBook(
+    @Query('garageId') garageId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.appService.getReportDayBook(garageId, from, to);
+  }
+
+  // ============================================================
   // AUTHENTICATION & SESSION MANAGEMENT
   // ============================================================
 

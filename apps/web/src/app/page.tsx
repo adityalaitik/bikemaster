@@ -580,6 +580,52 @@ export default function Home() {
     { id: "del1", date: "2026-05-28", vehicle: "TVS Apache 160", name: "Debasis Jena", plateNo: "OD-02-X-4422", mobile: "9853312345", invoice: "INV-2026-009", discount: 150, due: 0, supervisor: "Anil Dash", tech: "Manoj Kumar", kms: 12500, source: "Walk-in" },
     { id: "del2", date: "2026-05-27", vehicle: "Suzuki Access 125", name: "Mamata Sahu", plateNo: "OD-33-A-1100", mobile: "9438123456", invoice: "INV-2026-007", discount: 0, due: 350, supervisor: "Subhashis Sen", tech: "Ramesh Naik", kms: 8900, source: "Referral" },
   ]);
+
+  // ── Live data states for Reports, CRM, Analytics ─────────────────────────
+  const [reportApiData, setReportApiData] = useState<any[]>([]);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [crmFollowups, setCrmFollowups] = useState<any[]>([]);
+  const [crmUpcoming, setCrmUpcoming] = useState<any[]>([]);
+  const [crmDropouts, setCrmDropouts] = useState<any[]>([]);
+  const [crmSubTab, setCrmSubTab] = useState<"followups" | "upcoming" | "dropouts">("followups");
+  const [analyticsKpis, setAnalyticsKpis] = useState<any>({});
+  const [revenueTrend, setRevenueTrend] = useState<any[]>([]);
+  const [serviceTypeData, setServiceTypeData] = useState<any[]>([]);
+  const [lowStockAlerts, setLowStockAlerts] = useState<any[]>([]);
+
+  // Fetch CRM data
+  useEffect(() => {
+    if (activeTab !== "CRM") return;
+    const fetch3 = async () => {
+      const [r1, r2, r3] = await Promise.all([
+        apiFetch("/crm/followups").then(r => r.ok ? r.json() : []),
+        apiFetch("/crm/upcoming-services").then(r => r.ok ? r.json() : []),
+        apiFetch("/crm/dropouts").then(r => r.ok ? r.json() : []),
+      ]);
+      setCrmFollowups(r1); setCrmUpcoming(r2); setCrmDropouts(r3);
+    };
+    fetch3().catch(() => {});
+  }, [activeTab, currentUser?.garageId]);
+
+  // Fetch BI Analytics data
+  useEffect(() => {
+    if (activeTab !== "BI Analytics") return;
+    const fetchBI = async () => {
+      const [kpis, trend, byType] = await Promise.all([
+        apiFetch("/analytics/kpis").then(r => r.ok ? r.json() : {}),
+        apiFetch("/analytics/revenue-trend").then(r => r.ok ? r.json() : []),
+        apiFetch("/analytics/by-service-type").then(r => r.ok ? r.json() : []),
+      ]);
+      setAnalyticsKpis(kpis); setRevenueTrend(trend); setServiceTypeData(byType);
+    };
+    fetchBI().catch(() => {});
+  }, [activeTab, currentUser?.garageId]);
+
+  // Fetch low stock alerts
+  useEffect(() => {
+    if (activeTab !== "Inventory Management" && activeTab !== "Inventory") return;
+    apiFetch("/spare-parts/low-stock").then(r => r.ok ? r.json() : []).then(setLowStockAlerts).catch(() => {});
+  }, [activeTab, currentUser?.garageId]);
   const [techProductivityList, setTechProductivityList] = useState([
     { id: "tp1", jobId: "JOB-9981", vehicle: "OD-02-AX-1122", name: "Manoj Kumar", service: "CARBURETOR CLEAN", status: "Marked Done", start: "09:00 AM", stop: "09:45 AM", duration: "45 mins", speed: "45 mins", cost: 100, profit: 149 },
     { id: "tp2", jobId: "JOB-9982", vehicle: "OD-33-Y-9988", name: "Ramesh Naik", service: "SILENCER PAINT", status: "Marked Done", start: "10:15 AM", stop: "11:30 AM", duration: "75 mins", speed: "65 mins", cost: 150, profit: 99 },
@@ -1167,6 +1213,32 @@ export default function Home() {
   const [reportSearchText, setReportSearchText] = useState("");
   const [reportPaginationPage, setReportPaginationPage] = useState(1);
 
+  // Fetch reports data when Reports tab active or report type / dates change
+  useEffect(() => {
+    if (activeTab !== "Reports") return;
+    const fetchReport = async () => {
+      setReportLoading(true);
+      try {
+        const fromQ = reportDateFrom ? `&from=${reportDateFrom}` : "";
+        const toQ = reportDateTo ? `&to=${reportDateTo}` : "";
+        let url = "";
+        switch (selectedReportId) {
+          case "invoice": url = `/reports/invoices?x=1${fromQ}${toQ}`; break;
+          case "spares-consumption": url = `/reports/spares-consumption?x=1${fromQ}${toQ}`; break;
+          case "technician-productivity": url = `/reports/technician-productivity?x=1${fromQ}${toQ}`; break;
+          case "stock-movement": url = `/reports/stock-movement?x=1${fromQ}${toQ}`; break;
+          case "customer-source": url = `/reports/customer-sources?x=1`; break;
+          case "day-book": url = `/reports/day-book?x=1${fromQ}${toQ}`; break;
+          default: url = `/reports/day-book?x=1${fromQ}${toQ}`; break;
+        }
+        const res = await apiFetch(url);
+        if (res.ok) setReportApiData(await res.json());
+      } catch { /* keep previous */ } finally { setReportLoading(false); }
+    };
+    fetchReport();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, selectedReportId, reportDateFrom, reportDateTo, currentUser?.garageId]);
+
   // Mock Database for Reports
   const DAY_BOOK_DATA = [
     { id: "TX-001", date: "29 May 2026", particulars: "Regular Service (JC-123)", type: "Credit", amount: 1450, mode: "UPI" },
@@ -1227,63 +1299,18 @@ export default function Home() {
   ];
 
   const getFilteredReportData = () => {
+    // Use live API data; fall back to static mocks for gst-filing and vendor-purchase
     let rawData: any[] = [];
-    switch (selectedReportId) {
-      case "day-book":
-        rawData = DAY_BOOK_DATA;
-        break;
-      case "invoice":
-        rawData = INVOICE_REPORT_DATA;
-        break;
-      case "spares-consumption":
-        rawData = SPARES_CONSUMPTION_DATA;
-        break;
-      case "technician-productivity":
-        rawData = TECHNICIAN_PRODUCTIVITY_DATA;
-        break;
-      case "gst-filing":
-        rawData = GST_FILING_DATA;
-        break;
-      case "vendor-purchase":
-        rawData = VENDOR_PURCHASE_DATA;
-        break;
-      case "customer-source":
-        rawData = CUSTOMER_SOURCE_DATA;
-        break;
-      case "stock-movement":
-        rawData = STOCK_MOVEMENT_DATA;
-        break;
-      default:
-        rawData = DAY_BOOK_DATA;
-    }
+    if (selectedReportId === "gst-filing") rawData = GST_FILING_DATA;
+    else if (selectedReportId === "vendor-purchase") rawData = VENDOR_PURCHASE_DATA;
+    else rawData = reportApiData;
 
-    // Filter by search text
     if (reportSearchText.trim() !== "") {
       const query = reportSearchText.toLowerCase();
-      rawData = rawData.filter((item: any) => {
-        return Object.values(item).some(
-          (val) => val && val.toString().toLowerCase().includes(query)
-        );
-      });
+      rawData = rawData.filter((item: any) =>
+        Object.values(item).some((val) => val && val.toString().toLowerCase().includes(query))
+      );
     }
-
-    // Filter by date range (if the item has a 'date' field)
-    if (reportDateFrom && reportDateTo) {
-      rawData = rawData.filter((item: any) => {
-        if (!item.date) return true;
-        try {
-          const itemTime = new Date(item.date).getTime();
-          const fromTime = new Date(reportDateFrom).getTime();
-          const toTime = new Date(reportDateTo).getTime();
-          if (isNaN(itemTime)) return true;
-          return itemTime >= fromTime && itemTime <= toTime;
-        } catch (e) {
-          return true;
-        }
-      });
-    }
-
-    // Filter by status (if applicable and not "All")
     if (reportFilterStatus !== "All") {
       rawData = rawData.filter((item: any) => {
         if (item.status) {
@@ -1297,7 +1324,6 @@ export default function Home() {
         return true;
       });
     }
-
     return rawData;
   };
 
@@ -3846,28 +3872,93 @@ export default function Home() {
             <div className="flex items-center space-x-2 text-[10px] uppercase font-black text-indigo-500 tracking-wider">
               <span>Business Intelligence Board</span>
               <span className="h-1 w-1 rounded-full bg-slate-350" />
-              <span>Spec 2 Analytic Graphs</span>
+              <span>Live Analytics</span>
             </div>
             <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-wide">
-              BI Analysis Graphs
+              BI Analysis Dashboard
             </h2>
 
-            {/* Top Summaries */}
+            {/* Live KPI Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              {[
+                { label: "Total Revenue", value: `₹${(analyticsKpis.totalRevenue || 0).toLocaleString("en-IN")}`, color: "text-green-600" },
+                { label: "Total Collected", value: `₹${(analyticsKpis.totalCollected || 0).toLocaleString("en-IN")}`, color: "text-teal-600" },
+                { label: "Total Jobs", value: analyticsKpis.totalJobs || 0, color: "text-indigo-600" },
+                { label: "Completed", value: analyticsKpis.completedJobs || 0, color: "text-slate-700 dark:text-slate-300" },
+                { label: "Avg Ticket", value: `₹${(analyticsKpis.avgTicket || 0).toLocaleString("en-IN")}`, color: "text-amber-600" },
+                { label: "Invoices", value: analyticsKpis.invoiceCount || 0, color: "text-purple-600" },
+              ].map(k => (
+                <div key={k.label} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                  <span className="text-[9px] uppercase font-black text-slate-400 block tracking-wider">{k.label}</span>
+                  <span className={`text-lg font-black mt-1 block ${k.color}`}>{k.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Service Type Breakdown */}
+            {serviceTypeData.length > 0 && (
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+                <h3 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">Jobs by Service Type</h3>
+                <div className="space-y-2">
+                  {serviceTypeData.slice(0, 8).map((s: any) => {
+                    const pct = Math.round((s.count / (analyticsKpis.totalJobs || 1)) * 100);
+                    return (
+                      <div key={s.name} className="flex items-center gap-3">
+                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 w-44 truncate">{s.name}</span>
+                        <div className="flex-1 bg-slate-100 dark:bg-slate-900 rounded-full h-2">
+                          <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 w-12 text-right">{s.count} jobs</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Revenue Trend */}
+            {revenueTrend.length > 0 && (
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+                <h3 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">Revenue by Day</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="text-slate-400 font-black uppercase text-[9px] tracking-wider">
+                        <th className="py-2 px-3 text-left">Date</th>
+                        <th className="py-2 px-3 text-right">Revenue</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {revenueTrend.slice(-14).reverse().map((r: any) => (
+                        <tr key={r.date} className="hover:bg-slate-50 dark:hover:bg-slate-900/30">
+                          <td className="py-2 px-3 font-mono text-slate-600 dark:text-slate-400">{r.date}</td>
+                          <td className="py-2 px-3 text-right font-bold text-green-600">₹{Number(r.revenue).toLocaleString("en-IN")}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Top Summaries (static charts kept for visual richness) */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
               <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm font-sans">
-                <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">Gross Margin</span>
-                <span className="text-lg font-black text-slate-850 dark:text-white mt-1 block">₹2,84,500.00</span>
-                <span className="text-[10px] font-bold text-green-500 mt-0.5 block">▲ +14% Month-on-Month</span>
+                <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">Total Revenue (All Time)</span>
+                <span className="text-lg font-black text-green-600 mt-1 block">₹{(analyticsKpis.totalRevenue || 0).toLocaleString("en-IN")}</span>
+                <span className="text-[10px] font-bold text-green-500 mt-0.5 block">Live from invoices</span>
               </div>
               <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm font-sans">
                 <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">Average Ticket Size</span>
-                <span className="text-lg font-black text-slate-850 dark:text-white mt-1 block">₹1,846.50</span>
-                <span className="text-[10px] font-bold text-indigo-500 mt-0.5 block">▲ Steady service value</span>
+                <span className="text-lg font-black text-slate-850 dark:text-white mt-1 block">₹{(analyticsKpis.avgTicket || 0).toLocaleString("en-IN")}</span>
+                <span className="text-[10px] font-bold text-indigo-500 mt-0.5 block">Per invoice average</span>
               </div>
               <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm font-sans">
-                <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">Parts vs Labor Share</span>
-                <span className="text-lg font-black text-slate-850 dark:text-white mt-1 block">62% / 38%</span>
-                <span className="text-[10px] font-bold text-teal-500 mt-0.5 block">● Healthy parts stock yield</span>
+                <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">Collection Rate</span>
+                <span className="text-lg font-black text-teal-600 mt-1 block">
+                  {analyticsKpis.totalRevenue ? Math.round((analyticsKpis.totalCollected / analyticsKpis.totalRevenue) * 100) : 0}%
+                </span>
+                <span className="text-[10px] font-bold text-teal-500 mt-0.5 block">Collected vs invoiced</span>
               </div>
             </div>
 
@@ -3974,7 +4065,102 @@ export default function Home() {
         );
       }
 
-      case "CRM":
+      case "CRM": {
+        return (
+          <div className="flex-1 flex flex-col overflow-y-auto bg-slate-50 dark:bg-slate-900/30 p-6 space-y-6 font-sans w-full">
+            <div>
+              <div className="flex items-center space-x-2 text-[10px] uppercase font-black text-indigo-500 tracking-wider mb-1">
+                <span>CRM & Follow-ups</span>
+              </div>
+              <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-wide">Customer Relationship</h2>
+            </div>
+            {/* Sub-tab switcher */}
+            <div className="flex gap-2">
+              {(["followups", "upcoming", "dropouts"] as const).map(t => (
+                <button key={t} onClick={() => setCrmSubTab(t)}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${crmSubTab === t ? "bg-indigo-600 text-white shadow" : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"}`}>
+                  {t === "followups" ? "Follow-ups" : t === "upcoming" ? "Due for Service" : "Dropout Customers"}
+                </button>
+              ))}
+            </div>
+
+            {crmSubTab === "followups" && (
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+                <table className="w-full text-xs border-collapse">
+                  <thead><tr className="bg-slate-50 dark:bg-slate-900/30 text-slate-500 dark:text-slate-400 font-black tracking-wider uppercase border-b border-slate-200 dark:border-slate-800">
+                    <th className="py-3 px-4">Job Card</th><th className="py-3 px-4">Customer</th><th className="py-3 px-4">Phone</th>
+                    <th className="py-3 px-4">Vehicle</th><th className="py-3 px-4">Completed</th><th className="py-3 px-4 text-center">Rating</th><th className="py-3 px-4 text-right">Balance Due</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {crmFollowups.length === 0 ? (
+                      <tr><td colSpan={7} className="py-8 text-center text-slate-400 text-xs">No completed jobs yet</td></tr>
+                    ) : crmFollowups.map((r: any, i: number) => (
+                      <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-900/30 text-slate-700 dark:text-slate-300">
+                        <td className="py-3 px-4 font-mono text-[10px] text-indigo-600">{r.jobCardNo}</td>
+                        <td className="py-3 px-4 font-bold">{r.customerName}</td>
+                        <td className="py-3 px-4">{r.phone}</td>
+                        <td className="py-3 px-4">{r.vehicleNo}</td>
+                        <td className="py-3 px-4 text-slate-500">{r.completedAt}</td>
+                        <td className="py-3 px-4 text-center text-amber-500">{r.rating ? "⭐".repeat(r.rating) : "—"}</td>
+                        <td className={`py-3 px-4 text-right font-bold ${r.dueAmount > 0 ? "text-red-500" : "text-green-600"}`}>₹{r.dueAmount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {crmSubTab === "upcoming" && (
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+                <table className="w-full text-xs border-collapse">
+                  <thead><tr className="bg-slate-50 dark:bg-slate-900/30 text-slate-500 dark:text-slate-400 font-black tracking-wider uppercase border-b border-slate-200 dark:border-slate-800">
+                    <th className="py-3 px-4">Customer</th><th className="py-3 px-4">Phone</th><th className="py-3 px-4">Vehicle</th>
+                    <th className="py-3 px-4">Last Service</th><th className="py-3 px-4 text-right">Days Since</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {crmUpcoming.length === 0 ? (
+                      <tr><td colSpan={5} className="py-8 text-center text-slate-400 text-xs">No vehicles due for service</td></tr>
+                    ) : crmUpcoming.map((r: any, i: number) => (
+                      <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-900/30 text-slate-700 dark:text-slate-300">
+                        <td className="py-3 px-4 font-bold">{r.customerName}</td>
+                        <td className="py-3 px-4">{r.phone}</td>
+                        <td className="py-3 px-4 text-indigo-600">{r.vehicleNo}</td>
+                        <td className="py-3 px-4 text-slate-500">{r.lastService}</td>
+                        <td className={`py-3 px-4 text-right font-black ${r.daysSince > 180 ? "text-red-500" : "text-amber-500"}`}>{r.daysSince}d</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {crmSubTab === "dropouts" && (
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+                <table className="w-full text-xs border-collapse">
+                  <thead><tr className="bg-slate-50 dark:bg-slate-900/30 text-slate-500 dark:text-slate-400 font-black tracking-wider uppercase border-b border-slate-200 dark:border-slate-800">
+                    <th className="py-3 px-4">Customer</th><th className="py-3 px-4">Phone</th><th className="py-3 px-4">Vehicle</th>
+                    <th className="py-3 px-4">Last Visit</th><th className="py-3 px-4 text-right">Days Inactive</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {crmDropouts.length === 0 ? (
+                      <tr><td colSpan={5} className="py-8 text-center text-slate-400 text-xs">No dropout customers</td></tr>
+                    ) : crmDropouts.map((r: any, i: number) => (
+                      <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-900/30 text-slate-700 dark:text-slate-300">
+                        <td className="py-3 px-4 font-bold">{r.customerName}</td>
+                        <td className="py-3 px-4">{r.phone}</td>
+                        <td className="py-3 px-4 text-indigo-600">{r.vehicleNo}</td>
+                        <td className="py-3 px-4 text-slate-500">{r.lastVisit}</td>
+                        <td className="py-3 px-4 text-right font-black text-red-500">{r.daysSince}d</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      }
+
       case "Customers": {
         // Derive customer list from real branch-scoped jobs
         const custMap: Record<string, { id: string; name: string; phone: string; email: string; joined: string; lastVehicle: string; spent: number; visits: number; rating: number }> = {};
@@ -5569,6 +5755,19 @@ export default function Home() {
                         <span>Add Part</span>
                       </button>
                     </div>
+                    {lowStockAlerts.length > 0 && (
+                      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3">
+                        <p className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase tracking-wider mb-1.5">⚠ {lowStockAlerts.length} Low Stock Alert{lowStockAlerts.length > 1 ? "s" : ""}</p>
+                        <div className="space-y-1">
+                          {lowStockAlerts.slice(0, 5).map((a: any) => (
+                            <div key={a.id} className="flex justify-between text-[10px] font-semibold text-red-700 dark:text-red-300">
+                              <span className="truncate">{a.name}</span>
+                              <span className="font-black ml-2">{a.stockQty} left</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="relative">
                       <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
@@ -6020,7 +6219,12 @@ export default function Home() {
                 {/* ============================================================ */}
                 {/* REPORTS RIGHT PANEL: ACTIVE WORKSPACE & DATA LISTING */}
                 {/* ============================================================ */}
-                {(() => {
+                {reportLoading && (
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="text-xs font-bold text-slate-400 animate-pulse">Loading report data...</div>
+                  </div>
+                )}
+                {!reportLoading && (() => {
                   const filteredData = getFilteredReportData();
                   const ITEMS_PER_PAGE = 5;
                   const totalPages = Math.max(1, Math.ceil(filteredData.length / ITEMS_PER_PAGE));

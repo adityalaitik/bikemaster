@@ -1086,4 +1086,334 @@ export class AppService {
   private parseJSON<T>(value: string | null | undefined, fallback: T): T {
     try { return value ? JSON.parse(value) : fallback; } catch { return fallback; }
   }
+
+  // ── PATCH Spare Part ──────────────────────────────────────────────────────
+  async updateSparePart(id: string, data: any): Promise<SparePartMaster> {
+    const part = await this.sparesRepo.findOneBy({ id });
+    if (!part) throw new NotFoundException(`Spare part ${id} not found`);
+    if (data.name) part.partName = data.name;
+    if (data.hsnCode) part.hsnCode = data.hsnCode;
+    await this.sparesRepo.save(part);
+    if (data.price !== undefined || data.mrp !== undefined || data.stock !== undefined) {
+      const batch = await this.batchRepo.findOne({ where: { sparePartId: id }, order: { createdAt: 'DESC' } });
+      if (batch) {
+        if (data.price !== undefined) batch.sellingPrice = data.price;
+        if (data.mrp !== undefined) batch.mrp = data.mrp;
+        if (data.stock !== undefined) batch.availableQty = data.stock;
+        await this.batchRepo.save(batch);
+      }
+    }
+    const updated = await this.sparesRepo.findOneBy({ id });
+    const batch = await this.batchRepo.findOne({ where: { sparePartId: id }, order: { createdAt: 'DESC' } });
+    return { id: updated!.id, name: updated!.partName, partNumber: updated!.partNumber, price: Number(batch?.sellingPrice || 0), mrp: Number(batch?.mrp || 0), stockQty: batch?.availableQty || 0, hsnCode: updated!.hsnCode || 'N/A' };
+  }
+
+  // ── DELETE Spare Part ─────────────────────────────────────────────────────
+  async deleteSparePart(id: string): Promise<{ ok: boolean }> {
+    await this.sparesRepo.update(id, { isActive: false } as any);
+    return { ok: true };
+  }
+
+  // ── Low Stock Alerts ──────────────────────────────────────────────────────
+  async getLowStockAlerts(garageId?: string, threshold = 10) {
+    const where: any = { isActive: true };
+    if (garageId) where.garageId = garageId;
+    const parts = await this.sparesRepo.find({ where });
+    const result: any[] = [];
+    for (const part of parts) {
+      const batch = await this.batchRepo.findOne({ where: { sparePartId: part.id }, order: { createdAt: 'DESC' } });
+      const qty = batch?.availableQty || 0;
+      if (qty <= threshold) {
+        result.push({ id: part.id, name: part.partName, partNumber: part.partNumber, stockQty: qty, threshold });
+      }
+    }
+    return result;
+  }
+
+  // ── Vehicle Search (typeahead) ────────────────────────────────────────────
+  async searchVehicles(q: string) {
+    if (!q || q.length < 2) return [];
+    const rows = await this.vehicleRepo
+      .createQueryBuilder('v')
+      .where('v.registrationNo LIKE :q', { q: `%${q.toUpperCase()}%` })
+      .limit(10)
+      .getMany();
+    const result: any[] = [];
+    for (const v of rows) {
+      const cust = await this.customerRepo.findOne({ where: { id: undefined } }).catch(() => null);
+      const model = await this.modelRepo.findOneBy({ id: v.modelId });
+      const brand = model ? await this.brandRepo.findOneBy({ id: model.brandId }) : null;
+      result.push({ vehicleNo: v.registrationNo, brandModel: `${brand?.name || ''} ${model?.name || ''}`.trim() });
+    }
+    return result;
+  }
+
+  // ── Add Vehicle Brand ─────────────────────────────────────────────────────
+  async addBrand(data: { name: string }): Promise<VehicleBrand> {
+    const row = await this.brandRepo.save(this.brandRepo.create({ name: data.name }));
+    return { id: row.id, name: row.name };
+  }
+
+  // ── Add Vehicle Model ─────────────────────────────────────────────────────
+  async addModel(data: { brandId: string; name: string; category?: string }): Promise<VehicleModel> {
+    const row = await this.modelRepo.save(this.modelRepo.create({ brandId: data.brandId, name: data.name, vehicleType: data.category || 'motorcycle' }));
+    return { id: row.id, brandId: row.brandId, name: row.name, category: row.vehicleType, variant: '' };
+  }
+
+  // ── CRM: Follow-ups (completed jobs, not yet rated) ───────────────────────
+  async getCrmFollowups(garageId?: string) {
+    if (!garageId) return [];
+    const jcs = await this.jobCardRepo.find({
+      where: { garageId, status: 'completed', isDeleted: false },
+      order: { updatedAt: 'DESC' },
+      take: 50,
+    });
+    const result: any[] = [];
+    for (const jc of jcs) {
+      const customer = await this.customerRepo.findOneBy({ id: jc.customerId });
+      const vehicle = await this.vehicleRepo.findOneBy({ id: jc.vehicleId });
+      const invoice = await this.invoiceRepo.findOne({ where: { jobCardId: jc.id } });
+      result.push({
+        jobCardNo: jc.jobCardNo,
+        customerName: customer?.name || 'Unknown',
+        phone: customer?.phone || '—',
+        vehicleNo: vehicle?.registrationNo || '—',
+        completedAt: jc.updatedAt?.toISOString().split('T')[0] || '—',
+        rating: jc.rating || null,
+        dueAmount: invoice ? Math.max(0, Number(invoice.totalAmount) - Number(jc.paidAmount || 0)) : 0,
+      });
+    }
+    return result;
+  }
+
+  // ── CRM: Upcoming Services (vehicles last serviced 90+ days ago) ──────────
+  async getCrmUpcomingServices(garageId?: string) {
+    if (!garageId) return [];
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 90);
+    const jcs = await this.jobCardRepo
+      .createQueryBuilder('jc')
+      .where('jc.garageId = :garageId', { garageId })
+      .andWhere('jc.isDeleted = 0')
+      .andWhere('jc.dateOfArrival < :cutoff', { cutoff })
+      .orderBy('jc.dateOfArrival', 'DESC')
+      .getMany();
+
+    const seenVehicles = new Set<string>();
+    const result: any[] = [];
+    for (const jc of jcs) {
+      if (seenVehicles.has(jc.vehicleId)) continue;
+      seenVehicles.add(jc.vehicleId);
+      const customer = await this.customerRepo.findOneBy({ id: jc.customerId });
+      const vehicle = await this.vehicleRepo.findOneBy({ id: jc.vehicleId });
+      const daysSince = Math.floor((Date.now() - new Date(jc.dateOfArrival).getTime()) / 86400000);
+      result.push({
+        jobCardNo: jc.jobCardNo,
+        customerName: customer?.name || 'Unknown',
+        phone: customer?.phone || '—',
+        vehicleNo: vehicle?.registrationNo || '—',
+        lastService: jc.dateOfArrival?.toISOString().split('T')[0] || '—',
+        daysSince,
+      });
+      if (result.length >= 30) break;
+    }
+    return result;
+  }
+
+  // ── CRM: Dropout customers (no visit in 60+ days) ─────────────────────────
+  async getCrmDropouts(garageId?: string) {
+    if (!garageId) return [];
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 60);
+    const jcs = await this.jobCardRepo
+      .createQueryBuilder('jc')
+      .where('jc.garageId = :garageId', { garageId })
+      .andWhere('jc.isDeleted = 0')
+      .orderBy('jc.dateOfArrival', 'DESC')
+      .getMany();
+
+    const latestByCustomer = new Map<string, typeof jcs[0]>();
+    for (const jc of jcs) {
+      if (!latestByCustomer.has(jc.customerId)) latestByCustomer.set(jc.customerId, jc);
+    }
+
+    const result: any[] = [];
+    for (const [custId, jc] of latestByCustomer) {
+      if (new Date(jc.dateOfArrival) < cutoff) {
+        const customer = await this.customerRepo.findOneBy({ id: custId });
+        const vehicle = await this.vehicleRepo.findOneBy({ id: jc.vehicleId });
+        const daysSince = Math.floor((Date.now() - new Date(jc.dateOfArrival).getTime()) / 86400000);
+        result.push({ customerName: customer?.name || 'Unknown', phone: customer?.phone || '—', vehicleNo: vehicle?.registrationNo || '—', lastVisit: jc.dateOfArrival?.toISOString().split('T')[0] || '—', daysSince });
+      }
+    }
+    return result.sort((a, b) => b.daysSince - a.daysSince).slice(0, 30);
+  }
+
+  // ── Analytics: KPIs ───────────────────────────────────────────────────────
+  async getAnalyticsKpis(garageId?: string, from?: string, to?: string) {
+    if (!garageId) return {};
+    const where: any = { garageId, isDeleted: false };
+    const invoiceWhere: any = { garageId };
+    if (from && to) {
+      const f = new Date(from); const t = new Date(to); t.setHours(23, 59, 59);
+      where.dateOfArrival = { $gte: f, $lte: t };
+    }
+
+    const invoices = await this.invoiceRepo.find({ where: invoiceWhere, order: { createdAt: 'DESC' } });
+    const filteredInvoices = from && to
+      ? invoices.filter(inv => { const d = new Date(inv.createdAt); return d >= new Date(from) && d <= new Date(to + 'T23:59:59'); })
+      : invoices;
+
+    const totalRevenue = filteredInvoices.reduce((s, inv) => s + Number(inv.totalAmount), 0);
+    const totalCollected = filteredInvoices.reduce((s, inv) => s + Number(inv.customerAmount || inv.totalAmount), 0);
+    const totalJobs = await this.jobCardRepo.countBy({ garageId, isDeleted: false });
+    const completedJobs = await this.jobCardRepo.countBy({ garageId, isDeleted: false, status: 'completed' });
+    const avgTicket = filteredInvoices.length ? totalRevenue / filteredInvoices.length : 0;
+
+    return { totalRevenue, totalCollected, totalJobs, completedJobs, avgTicket: Math.round(avgTicket), invoiceCount: filteredInvoices.length };
+  }
+
+  // ── Analytics: Revenue Trend (last 30 days) ───────────────────────────────
+  async getAnalyticsRevenueTrend(garageId?: string) {
+    if (!garageId) return [];
+    const invoices = await this.invoiceRepo.find({ where: { garageId }, order: { createdAt: 'ASC' } });
+    const map = new Map<string, number>();
+    for (const inv of invoices) {
+      const day = inv.createdAt.toISOString().split('T')[0];
+      map.set(day, (map.get(day) || 0) + Number(inv.totalAmount));
+    }
+    return Array.from(map.entries()).map(([date, revenue]) => ({ date, revenue })).slice(-30);
+  }
+
+  // ── Analytics: Jobs by Service Type ──────────────────────────────────────
+  async getAnalyticsByServiceType(garageId?: string) {
+    if (!garageId) return [];
+    const jcs = await this.jobCardRepo.find({ where: { garageId, isDeleted: false } });
+    const map = new Map<string, number>();
+    for (const jc of jcs) {
+      const t = jc.serviceType || 'General Service';
+      map.set(t, (map.get(t) || 0) + 1);
+    }
+    return Array.from(map.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+  }
+
+  // ── Reports: Invoice Report with date filter ──────────────────────────────
+  async getReportInvoices(garageId?: string, from?: string, to?: string) {
+    if (!garageId) return [];
+    const all = await this.getInvoices(garageId);
+    if (!from && !to) return all;
+    return all.filter(inv => {
+      const d = new Date(inv.date);
+      const ok = (!from || d >= new Date(from)) && (!to || d <= new Date(to + 'T23:59:59'));
+      return ok;
+    });
+  }
+
+  // ── Reports: Spares Consumption ───────────────────────────────────────────
+  async getReportSparesConsumption(garageId?: string, from?: string, to?: string) {
+    if (!garageId) return [];
+    const txns = await this.txnRepo
+      .createQueryBuilder('t')
+      .where('t.garageId = :garageId AND t.transactionType = :type', { garageId, type: 'issue' })
+      .getMany();
+    const filtered = txns.filter(t => {
+      if (!from && !to) return true;
+      const d = new Date(t.createdAt);
+      return (!from || d >= new Date(from)) && (!to || d <= new Date(to + 'T23:59:59'));
+    });
+    const map = new Map<string, { name: string; code: string; qty: number; total: number }>();
+    for (const t of filtered) {
+      const part = await this.sparesRepo.findOneBy({ id: t.sparePartId });
+      const key = t.sparePartId;
+      if (!map.has(key)) map.set(key, { name: part?.partName || '—', code: part?.partNumber || '—', qty: 0, total: 0 });
+      const entry = map.get(key)!;
+      entry.qty += t.quantity;
+      entry.total += t.quantity * Number(t.unitPrice);
+    }
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }
+
+  // ── Reports: Technician Productivity ────────────────────────────────────
+  async getReportTechnicianProductivity(garageId?: string, from?: string, to?: string) {
+    if (!garageId) return [];
+    const jcs = await this.jobCardRepo.find({ where: { garageId, isDeleted: false } });
+    const filtered = jcs.filter(jc => {
+      if (!from && !to) return true;
+      const d = new Date(jc.dateOfArrival);
+      return (!from || d >= new Date(from)) && (!to || d <= new Date(to + 'T23:59:59'));
+    });
+    const empMap = new Map<string, { name: string; tickets: number; totalRevenue: number }>();
+    for (const jc of filtered) {
+      if (!jc.serviceAdvisorId) continue;
+      const key = jc.serviceAdvisorId;
+      if (!empMap.has(key)) {
+        const emp = await this.employeeRepo.findOneBy({ id: key });
+        empMap.set(key, { name: emp?.name || 'Unknown', tickets: 0, totalRevenue: 0 });
+      }
+      const entry = empMap.get(key)!;
+      entry.tickets++;
+      const jcInv = await this.invoiceRepo.findOne({ where: { jobCardId: jc.id } });
+      entry.totalRevenue += Number(jcInv?.totalAmount || 0);
+    }
+    return Array.from(empMap.values()).sort((a, b) => b.tickets - a.tickets);
+  }
+
+  // ── Reports: Stock Movement ───────────────────────────────────────────────
+  async getReportStockMovement(garageId?: string, from?: string, to?: string) {
+    if (!garageId) return [];
+    const parts = await this.sparesRepo.find({ where: { garageId, isActive: true } });
+    const result: any[] = [];
+    for (const part of parts) {
+      const txns = await this.txnRepo.find({ where: { sparePartId: part.id, garageId } });
+      const filtered = txns.filter(t => {
+        if (!from && !to) return true;
+        const d = new Date(t.createdAt);
+        return (!from || d >= new Date(from)) && (!to || d <= new Date(to + 'T23:59:59'));
+      });
+      const batch = await this.batchRepo.findOne({ where: { sparePartId: part.id }, order: { createdAt: 'DESC' } });
+      const stockIn = filtered.filter(t => t.transactionType === 'purchase').reduce((s, t) => s + t.quantity, 0);
+      const stockOut = filtered.filter(t => t.transactionType === 'issue').reduce((s, t) => s + t.quantity, 0);
+      result.push({ name: part.partName, code: part.partNumber, stockIn, stockOut, closing: batch?.availableQty || 0 });
+    }
+    return result;
+  }
+
+  // ── Reports: Customer Source ──────────────────────────────────────────────
+  async getReportCustomerSources(garageId?: string) {
+    if (!garageId) return [];
+    const sources = await this.sourceRepo.find({ where: { garageId, isActive: true } });
+    const customers = await this.customerRepo.find({ where: { garageId } });
+    const result: any[] = [];
+    for (const src of sources) {
+      const count = customers.filter(c => c.sourceId === src.id).length;
+      result.push({ source: src.name, count });
+    }
+    return result.sort((a, b) => b.count - a.count);
+  }
+
+  // ── Reports: Day Book (invoice credits) ───────────────────────────────────
+  async getReportDayBook(garageId?: string, from?: string, to?: string) {
+    if (!garageId) return [];
+    const invoices = await this.invoiceRepo.find({ where: { garageId }, order: { createdAt: 'DESC' } });
+    const filtered = invoices.filter(inv => {
+      if (!from && !to) return true;
+      const d = new Date(inv.createdAt);
+      return (!from || d >= new Date(from)) && (!to || d <= new Date(to + 'T23:59:59'));
+    });
+    const result: any[] = [];
+    for (const inv of filtered) {
+      const jc = await this.jobCardRepo.findOneBy({ id: inv.jobCardId });
+      const customer = await this.customerRepo.findOneBy({ id: inv.customerId });
+      result.push({
+        id: inv.invoiceNo,
+        date: inv.createdAt.toISOString().split('T')[0],
+        particulars: `${jc?.serviceType || 'Service'} (${jc?.jobCardNo || inv.invoiceNo})`,
+        type: 'Credit',
+        amount: Number(inv.totalAmount),
+        mode: 'Mixed',
+        customerName: customer?.name || '—',
+      });
+    }
+    return result;
+  }
 }
