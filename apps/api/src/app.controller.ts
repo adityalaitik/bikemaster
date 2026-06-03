@@ -106,8 +106,11 @@ export class AppController {
   }
 
   @Get('vehicles/:vehicleNo/history')
-  async getVehicleHistory(@Param('vehicleNo') vehicleNo: string) {
-    return this.appService.getVehicleHistory(vehicleNo);
+  async getVehicleHistory(
+    @Param('vehicleNo') vehicleNo: string,
+    @Query('garageId') garageId?: string,
+  ) {
+    return this.appService.getVehicleHistory(vehicleNo, garageId);
   }
 
   @Get('job-cards/:id')

@@ -271,10 +271,7 @@ export class AppService {
 
   // ── Add Spare Part to Master ───────────────────────────────────────────────
   async addSparePartToMaster(data: any, garageId?: string): Promise<SparePartMaster> {
-    if (!garageId) {
-      const garage = await this.garageRepo.findOne({ where: { isActive: true } });
-      garageId = garage?.id || '';
-    }
+    if (!garageId) throw new Error('garageId is required to add a spare part');
     const part = await this.sparesRepo.save(this.sparesRepo.create({ garageId, partName: data.name, partNumber: data.partNo, hsnCode: data.hsn || 'N/A' }));
     const batch = await this.batchRepo.save(this.batchRepo.create({
       sparePartId: part.id, garageId, batchNo: `BATCH-${Date.now()}`,
@@ -286,10 +283,7 @@ export class AppService {
 
   // ── Add Service to Master ─────────────────────────────────────────────────
   async addServiceToMaster(data: any, garageId?: string): Promise<ServiceMaster> {
-    if (!garageId) {
-      const garage = await this.garageRepo.findOne({ where: { isActive: true } });
-      garageId = garage?.id || '';
-    }
+    if (!garageId) throw new Error('garageId is required to add a service');
     const sv = await this.servicesRepo.save(this.servicesRepo.create({ 
       garageId, 
       serviceName: data.name, 
@@ -339,7 +333,8 @@ export class AppService {
 
     const resolvedGarageId = garageId || jc.garageId;
     const count = await this.invoiceRepo.countBy({ garageId: resolvedGarageId });
-    const garage = resolvedGarageId ? await this.garageRepo.findOneBy({ id: resolvedGarageId }) : await this.garageRepo.findOne({ where: { isActive: true } });
+    const garage = resolvedGarageId ? await this.garageRepo.findOneBy({ id: resolvedGarageId }) : null;
+    if (!garage) throw new Error('garageId could not be resolved for invoice generation');
     const garageCode = garage?.code?.split('-')[0] || 'WMS';
     const year = new Date().getFullYear();
     const invoiceNo = `INV-${garageCode}-${year}-${String(count + 1).padStart(5, '0')}`;
@@ -576,8 +571,8 @@ export class AppService {
   // ── Save Spare Items ──────────────────────────────────────────────────────
   async saveSpareItems(jobCardId: string, items: any[], garageId?: string) {
     if (!garageId) {
-      const garage = await this.garageRepo.findOne({ where: { isActive: true } });
-      garageId = garage?.id || '';
+      const jc = await this.jobCardRepo.findOneBy({ jobCardNo: jobCardId });
+      garageId = jc?.garageId || '';
     }
 
     // Restore batch qty for any existing issue transactions on this job card
@@ -612,7 +607,7 @@ export class AppService {
       const qty = Number(item.qty) || 1;
       let sparePartId: string | null = item.sparePartId || null;
       if (!sparePartId && item.code) {
-        const part = await this.sparesRepo.findOne({ where: { partNumber: item.code, isActive: true } });
+        const part = await this.sparesRepo.findOne({ where: { partNumber: item.code, isActive: true, garageId } });
         sparePartId = part?.id || null;
       }
       if (!sparePartId) continue;
@@ -754,10 +749,9 @@ export class AppService {
 
   // ── Create Job Card ───────────────────────────────────────────────────────
   async createJobCard(data: any, garageId?: string): Promise<JobCard> {
-    // Resolve garage — prefer the passed garageId, fall back to first active
-    const garage = garageId
-      ? await this.garageRepo.findOneBy({ id: garageId })
-      : await this.garageRepo.findOne({ where: { isActive: true } });
+    // Resolve garage — garageId must be provided
+    const garage = garageId ? await this.garageRepo.findOneBy({ id: garageId }) : null;
+    if (!garage) throw new Error('garageId is required to create a job card');
     const resolvedGarageId = garage?.id || garageId || '';
     const organizationId = garage?.organizationId || '';
 
@@ -850,7 +844,9 @@ export class AppService {
     if ((data as any).actualDeliveryDate !== undefined) entity.actualDeliveryDate = new Date((data as any).actualDeliveryDate);
 
     if (data.advisor) {
-      const emp = await this.employeeRepo.findOneBy({ name: data.advisor, isActive: true });
+      const empWhere: any = { name: data.advisor, isActive: true };
+      if (entity.garageId) empWhere.garageId = entity.garageId;
+      const emp = await this.employeeRepo.findOneBy(empWhere);
       if (emp) entity.serviceAdvisorId = emp.id;
     }
 
@@ -987,14 +983,13 @@ export class AppService {
   }
 
   // ── Vehicle History ───────────────────────────────────────────────────────
-  async getVehicleHistory(vehicleNo: string): Promise<VehicleHistoryRow[]> {
+  async getVehicleHistory(vehicleNo: string, garageId?: string): Promise<VehicleHistoryRow[]> {
     const vehicle = await this.vehicleRepo.findOne({ where: { registrationNo: vehicleNo.toUpperCase() } });
     if (!vehicle) return [];
 
-    const jobCards = await this.jobCardRepo.find({
-      where: { vehicleId: vehicle.id, isDeleted: false },
-      order: { dateOfArrival: 'DESC' },
-    });
+    const where: any = { vehicleId: vehicle.id, isDeleted: false };
+    if (garageId) where.garageId = garageId;
+    const jobCards = await this.jobCardRepo.find({ where, order: { dateOfArrival: 'DESC' } });
     if (!jobCards.length) return [];
 
     const jobCardIds = jobCards.map(jc => jc.id);
