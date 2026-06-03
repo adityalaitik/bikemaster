@@ -1511,9 +1511,10 @@ export default function Home() {
   const handleSavePayment = async () => {
     if (!selectedJob) return;
     const totalPaid = Number(paymentForm.card) + Number(paymentForm.cash) + Number(paymentForm.cheque) + Number(paymentForm.other);
+    const netPayable = Math.round(selectedJob.estimate * 1.18) - (selectedJob.overallDiscount || 0);
     const updates = {
       paid: selectedJob.paid + totalPaid,
-      due: Math.max(0, selectedJob.estimate - (selectedJob.paid + totalPaid)),
+      due: Math.max(0, netPayable - (selectedJob.paid + totalPaid)),
       completion: 50,
       paymentBreakdown: {
         card: ((selectedJob as any).paymentBreakdown?.card || 0) + Number(paymentForm.card),
@@ -9759,15 +9760,15 @@ export default function Home() {
                 <div className="flex-1 text-center">
                   <h3 className="font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Edit Payment Details</h3>
                   <div className="text-[10px] font-bold text-slate-500 flex items-center justify-center space-x-3 mt-1">
-                    <span>Order Id: {selectedJob.id.split('-').pop()}</span>
+                    <span>Order Id: {selectedJob.id}</span>
                     <span>|</span>
-                    <span>Total Amount (incl. GST): Rs. {Math.round(selectedJob.estimate * 1.18)}</span>
+                    <span>Net Payable (incl. GST): Rs. {Math.round(selectedJob.estimate * 1.18) - (selectedJob.overallDiscount || 0)}</span>
                     <span>|</span>
                     <span>Total Discount: Rs. {selectedJob.overallDiscount || 0}</span>
                     <span>|</span>
                     <span>Total Paid: Rs. {selectedJob.paid}</span>
                     <span>|</span>
-                    <span>Total Due: Rs. {Math.max(0, Math.round(selectedJob.estimate * 1.18) - selectedJob.paid)}</span>
+                    <span>Total Due: Rs. {Math.max(0, Math.round(selectedJob.estimate * 1.18) - (selectedJob.overallDiscount || 0) - selectedJob.paid)}</span>
                   </div>
                 </div>
                 <button onClick={() => setIsPaymentModalOpen(false)} className="text-red-500 hover:scale-110 transition-transform"><X className="h-5 w-5" /></button>
@@ -9775,9 +9776,7 @@ export default function Home() {
 
               {(() => {
                 const gstRate = 0.18;
-                const baseAmount = selectedJob.estimate;
-                const gstAmount = Math.round(baseAmount * gstRate);
-                const totalWithGst = baseAmount + gstAmount;
+                const totalWithGst = Math.round(selectedJob.estimate * 1.18) - (selectedJob.overallDiscount || 0);
                 const enteredPaid = Number(paymentForm.card) + Number(paymentForm.cash) + Number(paymentForm.cheque) + Number(paymentForm.other);
                 const totalPaidSoFar = selectedJob.paid + enteredPaid;
                 const totalDue = Math.max(0, totalWithGst - totalPaidSoFar);
