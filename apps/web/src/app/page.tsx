@@ -4664,7 +4664,7 @@ export default function Home() {
               </div>
               <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-700/50 text-xs font-semibold px-2.5 py-1 rounded-full text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
                 <MapPin className="h-3 w-3 mr-1.5 text-green-500" />
-                {currentUser?.garageName ?? (currentUser?.garageCode === "PTI-003" ? "Patia Branch" : "Bhubaneswar Branch")}
+                {currentUser?.garageName ?? currentUser?.garageCode ?? "Branch"}
               </div>
             </div>
 
@@ -5125,7 +5125,7 @@ export default function Home() {
                             </div>
                             <div className="flex items-center space-x-1.5">
                               <span className="text-lg font-black tracking-tight text-slate-800 dark:text-white uppercase">{job.vehicleNo}</span>
-                              <span className="text-xs font-bold text-red-500">(Bhubaneswar)</span>
+                              <span className="text-xs font-bold text-red-500">({currentUser?.garageCode ?? "—"})</span>
                             </div>
                           </div>
                           
@@ -5580,9 +5580,9 @@ export default function Home() {
                         <button
                           onClick={async () => {
                             try {
-                              const res = await apiFetch(`/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completion: 100, actualDeliveryDate: new Date().toISOString() }) });
+                              const res = await apiFetch(`/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "Completed", completion: 100, actualDeliveryDate: new Date().toISOString() }) });
                               if (res.ok) { const u = await res.json(); setJobs(prev => prev.map(j => j.id === u.id ? u : j)); setSelectedJob(u); }
-                            } catch { setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, completion: 100 } : j)); }
+                            } catch { setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, completion: 100, status: "Completed" } : j)); }
                             addTimelineEntry(selectedJob.id, "Gate Pass Issued 🎉", `Vehicle ${selectedJob.vehicleNo} is cleared and ready to roll — safe travels!`);
                             triggerToast(`Gate Pass issued for ${selectedJob.vehicleNo}!`, "success");
                           }}
