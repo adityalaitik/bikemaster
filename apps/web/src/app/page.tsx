@@ -405,15 +405,28 @@ export default function Home() {
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [jobRatings, setJobRatings] = useState<Record<string, number>>({});
 
+  // Read session from localStorage synchronously so there is no flash of wrong branch on remount
+  const readSession = () => {
+    if (typeof window === "undefined") return null;
+    try {
+      const saved = localStorage.getItem("bikemaster_session");
+      if (saved) {
+        const s = JSON.parse(saved);
+        if (s?.garageId) return s;
+        localStorage.removeItem("bikemaster_session");
+      }
+    } catch { localStorage.removeItem("bikemaster_session"); }
+    return null;
+  };
+
   // Authentication states
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!readSession());
   const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [currentUser, setCurrentUser] = useState<{
     id: string; name: string; username: string; role: string;
     garageCode: string; garageId: string; garageName?: string; token: string;
-  } | null>({ id: "u1", name: "Aditya Pradhan", username: "admin", role: "super_admin",
-    garageCode: "BBR-001", garageId: "11111111-1111-1111-1111-111111111111", token: "bypass" });
+  } | null>(readSession);
 
   // Branch picker state — shown when a multi-branch user logs in
   const [pendingBranchUser, setPendingBranchUser] = useState<{
@@ -424,27 +437,6 @@ export default function Home() {
 
   // Ref that mirrors currentUser so non-hook helpers can read it synchronously
   const currentUserRef = useRef(currentUser);
-
-  // Restore session from localStorage on mount
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("bikemaster_session");
-      if (saved) {
-        try {
-          const session = JSON.parse(saved);
-          // Guard: old sessions without garageId must re-authenticate
-          if (!session.garageId) {
-            localStorage.removeItem("bikemaster_session");
-          } else {
-            setCurrentUser(session);
-            setIsLoggedIn(true);
-          }
-        } catch {
-          localStorage.removeItem("bikemaster_session");
-        }
-      }
-    }
-  }, []);
 
   // Keep ref in sync so apiFetch can read garageId without stale closure
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
@@ -1429,6 +1421,7 @@ export default function Home() {
       return; // Handled by navigation
     } else if (action === "Payments") {
       setSelectedJob(job);
+      setPaymentForm({ card: 0, cash: 0, cheque: 0, other: 0, remarks: "" });
       setIsPaymentModalOpen(true);
       return;
     } else if (action === "Discount") {
