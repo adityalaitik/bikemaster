@@ -108,6 +108,19 @@ interface JobCard {
   isStatusFilled?: boolean;
   overallDiscount?: number;
   advancePaid?: number;
+  // API fields
+  jobCardNo?: string;
+  garageId?: string;
+  customerId?: string;
+  vehicleModel?: string;
+  technicianName?: string;
+  advisorName?: string;
+  finalAmount?: number;
+  estimatedCost?: number;
+  paidAmount?: number;
+  rating?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface InventoryBatch {
@@ -526,7 +539,7 @@ export default function Home() {
       }
     };
     fetchInvoices();
-  }, [activeTab]);
+  }, [activeTab, currentUser?.garageId]);
 
   // Load Inventory Stock Summary from Backend
   useEffect(() => {
@@ -544,7 +557,7 @@ export default function Home() {
     if (activeTab === "Inventory Management") {
       fetchInventory();
     }
-  }, [activeTab]);
+  }, [activeTab, currentUser?.garageId]);
 
   // Load Services Master from Backend
   useEffect(() => {
@@ -569,7 +582,7 @@ export default function Home() {
     if (activeTab === "Manage Services") {
       fetchServices();
     }
-  }, [activeTab]);
+  }, [activeTab, currentUser?.garageId]);
 
   const [deletedRecordsList, setDeletedRecordsList] = useState([
     { id: "del1", date: "2026-05-28", vehicle: "TVS Apache 160", name: "Debasis Jena", plateNo: "OD-02-X-4422", mobile: "9853312345", invoice: "INV-2026-009", discount: 150, due: 0, supervisor: "Anil Dash", tech: "Manoj Kumar", kms: 12500, source: "Walk-in" },
@@ -1358,17 +1371,35 @@ export default function Home() {
       }
     };
     fetchJobs();
-  }, [activeFilter, searchQuery]);
+  }, [activeFilter, searchQuery, currentUser?.garageId]);
 
-  // Load employees from Backend dynamically
+  // Load employees from Backend dynamically (branch-aware)
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
         const res = await apiFetch(`/employees`);
         if (res.ok) {
           const data = await res.json();
+          // Populate full employees list for Manage Employee tab
+          if (data.length > 0) {
+            setEmployees(data.map((e: any) => ({
+              id: e.id,
+              workshopId: e.garageId || currentUser?.garageId || '—',
+              firstName: (e.name || '').split(' ')[0] || e.name,
+              lastName: (e.name || '').split(' ').slice(1).join(' ') || '',
+              username: e.username || e.name?.toLowerCase().replace(' ', '.') || '',
+              email: e.email || `${e.id}@bikemasters.com`,
+              contact: e.contact || '—',
+              designation: e.role === 'technician' ? 'Technician' : e.role === 'service_advisor' ? 'Service Advisor' : e.role === 'garage_manager' ? 'Manager' : 'Staff',
+              pwdExpiry: '2027-12-31',
+              mobileAuth: false,
+              dob: '',
+              address: ''
+            })));
+          }
+          // Also update dropdowns
           const techs = data.filter((e: any) => e.role === 'technician').map((e: any) => e.name);
-          const advisors = data.filter((e: any) => e.role === 'advisor' || e.role === 'supervisor').map((e: any) => e.name);
+          const advisors = data.filter((e: any) => e.role === 'service_advisor' || e.role === 'garage_manager').map((e: any) => e.name);
           if (techs.length > 0) setTechniciansList(techs);
           if (advisors.length > 0) setSupervisorsList(advisors);
         }
@@ -1377,7 +1408,7 @@ export default function Home() {
       }
     };
     fetchEmployees();
-  }, []);
+  }, [currentUser?.garageId, activeTab]);
   // Progress and Action Handlers
   const handleJobAction = async (job: JobCard, action: string) => {
     const updates: Partial<JobCard> = {};
@@ -3707,11 +3738,31 @@ export default function Home() {
   const renderCoreBusinessTabs = () => {
     switch (activeTab) {
       case "Dashboard": {
-        const activities = [
-          { id: 1, text: "Manoj Kumar started servicing OD-05-AB-1234", time: "10 mins ago", type: "service" },
-          { id: 2, text: "WhatsApp invoice generated for Priya Sharma (OD-02-XY-9876)", time: "25 mins ago", type: "invoice" },
-          { id: 3, text: "Stock depletion warning: Front Brake Shoe Assembly < 20 units", time: "1 hr ago", type: "stock" },
-          { id: 4, text: "Customer Debasis Jena rated service 5-stars ⭐", time: "3 hrs ago", type: "feedback" },
+        // Branch-aware KPI computations
+        const todayRevenue = jobs
+          .filter(j => ['Delivered', 'Payment Received', 'Invoice Generated'].includes(j.status))
+          .reduce((sum, j) => sum + (j.finalAmount || j.estimatedCost || 0), 0);
+        const pendingDues = jobs
+          .filter(j => j.status === 'Payment Processing' || j.status === 'Invoice Generated')
+          .reduce((sum, j) => sum + (j.finalAmount || j.estimatedCost || 0), 0);
+        // Branch-aware live activity log derived from actual job cards
+        const recentJobs = [...jobs].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()).slice(0, 4);
+        const activities = recentJobs.length > 0 ? recentJobs.map((j, i) => ({
+          id: i + 1,
+          text: j.status === 'Under Servicing' || j.status === 'WIP'
+            ? `${j.technicianName || 'Technician'} servicing ${j.vehicleNo} (${j.jobCardNo})`
+            : j.status === 'Invoice Generated' || j.status === 'Payment Received'
+            ? `Invoice generated for ${j.customerName} (${j.vehicleNo})`
+            : j.status === 'Delivered'
+            ? `${j.customerName} vehicle ${j.vehicleNo} delivered`
+            : `${j.jobCardNo}: ${j.customerName} — ${j.status}`,
+          time: 'recent',
+          type: j.status === 'Under Servicing' || j.status === 'WIP' ? 'service'
+            : j.status === 'Invoice Generated' || j.status === 'Payment Received' ? 'invoice'
+            : j.status === 'Delivered' ? 'feedback'
+            : 'service'
+        })) : [
+          { id: 1, text: `No active jobs at ${currentUser?.garageName || 'this branch'} yet`, time: '—', type: 'service' }
         ];
 
         return (
@@ -3744,7 +3795,7 @@ export default function Home() {
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Today&apos;s Revenue</span>
-                  <span className="text-sm font-black text-indigo-650 dark:text-indigo-400">₹34,250.00</span>
+                  <span className="text-sm font-black text-indigo-650 dark:text-indigo-400">₹{todayRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
 
@@ -3764,7 +3815,7 @@ export default function Home() {
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Pending Dues</span>
-                  <span className="text-sm font-black text-red-500">₹12,500.00</span>
+                  <span className="text-sm font-black text-red-500">₹{pendingDues.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
             </div>
@@ -3954,14 +4005,21 @@ export default function Home() {
 
       case "CRM":
       case "Customers": {
-        const mockCustList = [
-          { id: "C-098", name: "Debasis Jena", phone: "9853312345", email: "debasis.jena@yahoo.com", joined: "12 Jan 2026", lastVehicle: "TVS Apache (OD-02-X-4422)", spent: 4850, visits: 3, rating: 5 },
-          { id: "C-099", name: "Mamata Sahu", phone: "9438123456", email: "mamata@gmail.com", joined: "18 Feb 2026", lastVehicle: "Suzuki Access (OD-33-A-1100)", spent: 2300, visits: 2, rating: 4 },
-          { id: "C-100", name: "Aditya Pradhan", phone: "9876543210", email: "aditya@bikemaster.com", joined: "05 May 2026", lastVehicle: "Honda Activa (OD-05-AB-1234)", spent: 1450, visits: 1, rating: 5 },
-        ];
+        // Derive customer list from real branch-scoped jobs
+        const custMap: Record<string, { id: string; name: string; phone: string; email: string; joined: string; lastVehicle: string; spent: number; visits: number; rating: number }> = {};
+        jobs.forEach(j => {
+          const key = j.phone || j.customerName;
+          if (!custMap[key]) {
+            custMap[key] = { id: j.customerId || key, name: j.customerName, phone: j.phone || '—', email: '—', joined: j.createdAt ? new Date(j.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—', lastVehicle: `${j.vehicleModel || ''} (${j.vehicleNo})`.trim(), spent: j.finalAmount || j.estimatedCost || 0, visits: 0, rating: j.rating || 0 };
+          }
+          custMap[key].visits += 1;
+          custMap[key].spent += j.finalAmount || j.estimatedCost || 0;
+          if (j.vehicleNo) custMap[key].lastVehicle = `${j.vehicleModel || ''} (${j.vehicleNo})`.trim();
+        });
+        const custList = Object.values(custMap);
 
         const q = crudFormSearchQuery.toLowerCase();
-        const filteredCust = mockCustList.filter(c => c.name.toLowerCase().includes(q) || c.phone.includes(q));
+        const filteredCust = custList.filter(c => c.name.toLowerCase().includes(q) || c.phone.includes(q));
 
         return (
           <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/50 dark:bg-slate-900 font-sans w-full">
@@ -4037,14 +4095,23 @@ export default function Home() {
       }
 
       case "Payments": {
-        const paymentList = [
-          { id: "inv-9081", invoice: "INV-2026-041", date: "28/05/2026", customer: "Debasis Jena", total: 1416, paid: 1416, due: 0, method: "UPI" },
-          { id: "inv-9082", invoice: "INV-2026-042", date: "27/05/2026", customer: "Mamata Sahu", total: 1003, paid: 503, due: 500, method: "Split Payment" },
-          { id: "inv-9083", invoice: "INV-2026-043", date: "26/05/2026", customer: "Priyabrata Das", total: 2832, paid: 2000, due: 832, method: "Cash" },
-        ];
+        // Use real branch-scoped invoices from state
+        const paymentList = invoices.map((inv: any) => ({
+          id: inv.id || inv.invoiceNo,
+          invoice: inv.invoiceNo || '—',
+          date: inv.date || '—',
+          customer: inv.customerName || '—',
+          total: inv.totalAmount || 0,
+          paid: inv.paidAmount ?? inv.customerAmount ?? 0,
+          due: inv.dueAmount ?? Math.max(0, (inv.totalAmount || 0) - (inv.paidAmount || inv.customerAmount || 0)),
+          method: inv.paymentMethod || '—'
+        }));
+
+        const collected = paymentList.reduce((s: number, p: any) => s + p.paid, 0);
+        const outstanding = paymentList.reduce((s: number, p: any) => s + p.due, 0);
 
         const q = crudFormSearchQuery.toLowerCase();
-        const filteredPay = paymentList.filter(p => p.customer.toLowerCase().includes(q) || p.invoice.includes(q));
+        const filteredPay = paymentList.filter((p: any) => p.customer.toLowerCase().includes(q) || p.invoice.toLowerCase().includes(q));
 
         return (
           <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/50 dark:bg-slate-900 font-sans w-full">
@@ -4067,15 +4134,15 @@ export default function Home() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 shrink-0">
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm font-sans">
                   <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">Collected Dues</span>
-                  <span className="text-sm font-black text-green-500 mt-1 block">₹3,919.00</span>
+                  <span className="text-sm font-black text-green-500 mt-1 block">₹{collected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm font-sans">
                   <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">Outstanding Customer Dues</span>
-                  <span className="text-sm font-black text-red-500 mt-1 block">₹1,332.00</span>
+                  <span className="text-sm font-black text-red-500 mt-1 block">₹{outstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm font-sans">
-                  <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">Dues Billed to Insurer</span>
-                  <span className="text-sm font-black text-indigo-650 mt-1 block">₹500.00</span>
+                  <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">Total Invoiced</span>
+                  <span className="text-sm font-black text-indigo-650 mt-1 block">₹{(collected + outstanding).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
 

@@ -266,6 +266,17 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
     return {};
   };
 
+  const getGarageId = (): string | null => {
+    try {
+      const session = localStorage.getItem("bikemaster_session");
+      if (session) {
+        const { garageId } = JSON.parse(session);
+        return garageId || null;
+      }
+    } catch { /* ignore */ }
+    return null;
+  };
+
   const loadFallbackJob = () => {
     const fallbackComplaints = [
       { text: "Engine making heavy noise on acceleration", finding: "Loose timing chain and worn out tensioner guide", action: "repair_now" },
@@ -293,7 +304,7 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
         if (!res.ok) { triggerToast("Job card not found in DB", "warn"); loadFallbackJob(); return; }
 
         const ctx = await res.json();
-        const { jobCard, complaints, packages, offers, employees } = ctx;
+        const { jobCard, complaints, packages, offers, employees, spareCatalog, serviceCatalog } = ctx;
 
         setJob(jobCard);
         setAllocatedSpares((jobCard.spares || []).map((s: SpareItem) => ({ ...s, billedTo: s.billedTo || "customer" })));
@@ -303,6 +314,9 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
         setPackagesMaster(packages || []);
         setOffersMaster(offers || []);
         setEmployeesList(employees || []);
+        // Populate catalog directly from context (branch-scoped)
+        if (spareCatalog && spareCatalog.length > 0) setSparesCatalog(spareCatalog);
+        if (serviceCatalog && serviceCatalog.length > 0) setServicesCatalog(serviceCatalog);
       } catch (err) {
         console.error("Backend error loading estimation context:", err);
         loadFallbackJob();
@@ -313,10 +327,14 @@ export default function EstimationPage({ params }: { params: { jobCardId: string
 
   const fetchCatalog = async (q: string) => {
     try {
-      const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+      const garageId = getGarageId();
+      const garageParam = garageId ? `garageId=${encodeURIComponent(garageId)}` : '';
+      const qParam = q ? `q=${encodeURIComponent(q)}` : '';
+      const qs = [qParam, garageParam].filter(Boolean).join('&');
+      const sep = qs ? `?${qs}` : '';
       const [sparesRes, servicesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/spare-parts/search${qs}`, { headers: getAuthHeaders() }),
-        fetch(`${API_BASE_URL}/services/search${qs}`, { headers: getAuthHeaders() }),
+        fetch(`${API_BASE_URL}/spare-parts/search${sep}`, { headers: getAuthHeaders() }),
+        fetch(`${API_BASE_URL}/services/search${sep}`, { headers: getAuthHeaders() }),
       ]);
       if (sparesRes.ok) setSparesCatalog(await sparesRes.json());
       if (servicesRes.ok) setServicesCatalog(await servicesRes.json());

@@ -34,6 +34,14 @@ export interface JobCard {
   timeline: TimelineEntry[]; isEstimated?: boolean; isStatusFilled?: boolean; overallDiscount?: number; rating?: number;
   paymentBreakdown?: { card: number; cash: number; cheque: number; other: number; remarks: string } | null;
   statusNote?: string;
+  // Branch-aware fields
+  garageId?: string;
+  customerId?: string;
+  finalAmount?: number;
+  estimatedCost?: number;
+  paidAmount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface VehicleBrand { id: string; name: string; }
@@ -432,7 +440,17 @@ export class AppService {
     const where: any = { isActive: true };
     if (garageId) where.garageId = garageId;
     const rows = await this.employeeRepo.find({ where });
-    const mapped = rows.map(r => ({ id: r.id, name: r.name, role: EMPLOYEE_TYPE_TO_ROLE[r.type] || r.type }));
+    const mapped = rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      role: EMPLOYEE_TYPE_TO_ROLE[r.type] || r.type,
+      phone: r.phone,
+      email: r.email,
+      employeeCode: r.employeeCode,
+      garageId: r.garageId,
+      username: r.employeeCode,
+      contact: r.phone,
+    }));
     return role ? mapped.filter(e => e.role === role) : mapped;
   }
 
@@ -935,6 +953,13 @@ export class AppService {
       overallDiscount: discount,
       rating: entity.rating ?? null,
       paymentBreakdown: entity.paymentBreakdown ?? null,
+      garageId: entity.garageId,
+      customerId: entity.customerId,
+      finalAmount: estimate - discount,
+      estimatedCost: estimate,
+      paidAmount: paid,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
     };
   }
 
@@ -946,14 +971,17 @@ export class AppService {
 
   // ── Estimation Context (single load endpoint) ─────────────────────────────
   async getEstimationContext(jobCardNo: string) {
-    const [jobCard, complaints, packages, offers, employees, spareCatalog, serviceCatalog] = await Promise.all([
-      this.getJobCardById(jobCardNo),
+    // First fetch the job card to get its garageId for branch-scoped lookups
+    const jobCard = await this.getJobCardById(jobCardNo);
+    const garageId = (jobCard as any)?.garageId;
+    
+    const [complaints, packages, offers, employees, spareCatalog, serviceCatalog] = await Promise.all([
       this.getComplaints(jobCardNo),
-      this.getPackages(),
-      this.getOffers(),
-      this.getEmployees(),
-      this.getSpareParts(''),
-      this.getServicesMaster(''),
+      this.getPackages(garageId),
+      this.getOffers(garageId),
+      this.getEmployees(undefined, garageId),
+      this.getSpareParts('', garageId),
+      this.getServicesMaster('', garageId),
     ]);
     return { jobCard, complaints, packages, offers, employees, spareCatalog, serviceCatalog };
   }
