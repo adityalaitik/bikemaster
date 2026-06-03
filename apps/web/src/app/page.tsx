@@ -4398,49 +4398,6 @@ export default function Home() {
           ))}
         </div>
 
-      {/* ── Branch Picker Modal ───────────────────────────────────────────── */}
-      {showBranchPicker && pendingBranchUser && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className={`w-full max-w-sm mx-4 rounded-3xl p-8 shadow-2xl border ${
-            theme === "dark" ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
-          }`}>
-            <div className="mb-6 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-green-500/25">
-                <MapPin className="h-7 w-7 text-white" />
-              </div>
-              <h2 className={`text-xl font-black ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Select Branch</h2>
-              <p className={`text-sm mt-1.5 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
-                Welcome, <span className="font-bold">{pendingBranchUser.name}</span>. Choose a branch to continue.
-              </p>
-            </div>
-            <div className="space-y-3">
-              {pendingBranchUser.garages.map(g => (
-                <button
-                  key={g.garageId}
-                  onClick={() => handleBranchSelect(g)}
-                  className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-left transition-all hover:border-green-500 active:scale-[0.98] ${
-                    theme === "dark"
-                      ? "border-slate-700 bg-slate-900/50 hover:bg-green-900/20"
-                      : "border-slate-200 bg-slate-50 hover:bg-green-50"
-                  }`}
-                >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                    theme === "dark" ? "bg-green-900/40" : "bg-green-100"
-                  }`}>
-                    <MapPin className={`h-5 w-5 ${theme === "dark" ? "text-green-400" : "text-green-600"}`} />
-                  </div>
-                  <div>
-                    <div className={`font-bold text-sm ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{g.garageName}</div>
-                    <div className={`text-xs font-mono mt-0.5 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{g.garageCode}</div>
-                  </div>
-                  <ChevronRight className={`h-4 w-4 ml-auto ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`} />
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       </div>
     );
   }
