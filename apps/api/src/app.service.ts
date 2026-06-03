@@ -1140,10 +1140,31 @@ export class AppService {
       .getMany();
     const result: any[] = [];
     for (const v of rows) {
-      const cust = await this.customerRepo.findOne({ where: { id: undefined } }).catch(() => null);
       const model = await this.modelRepo.findOneBy({ id: v.modelId });
       const brand = model ? await this.brandRepo.findOneBy({ id: model.brandId }) : null;
-      result.push({ vehicleNo: v.registrationNo, brandModel: `${brand?.name || ''} ${model?.name || ''}`.trim() });
+      // Get customer info from the most recent job card for this vehicle
+      const latestJc = await this.jobCardRepo
+        .createQueryBuilder('jc')
+        .where('jc.vehicleNo = :vno', { vno: v.registrationNo })
+        .orderBy('jc.createdAt', 'DESC')
+        .getOne();
+      const customer = latestJc ? await this.customerRepo.findOneBy({ id: latestJc.customerId }) : null;
+      result.push({
+        regNo: v.registrationNo,
+        name: customer?.name || '',
+        phone: customer?.phone || '',
+        email: customer?.email || '',
+        address: customer?.address || '',
+        brand: brand?.name || '',
+        model: model?.name || '',
+        category: 'Scooter',
+        variant: '',
+        plateColor: v.numberPlateColor || 'white',
+        chassisNo: v.chassisNo || '',
+        engineNo: v.engineNo || '',
+        regDate: v.dateOfRegistration ? v.dateOfRegistration.toString().split('T')[0] : '',
+        mfgYear: v.mfgYear ? String(v.mfgYear) : '',
+      });
     }
     return result;
   }

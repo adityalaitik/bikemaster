@@ -373,7 +373,7 @@ const INITIAL_JOBS = [
 
 export default function Home() {
   const router = useRouter();
-  const [jobs, setJobs] = useState<JobCard[]>(INITIAL_JOBS);
+  const [jobs, setJobs] = useState<JobCard[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [theme, setTheme] = useState("light");
   const [mounted, setMounted] = useState(false);
@@ -465,43 +465,18 @@ export default function Home() {
     { id: "c2", brand: "NIKAVI", name: "Chain Clean Spray", code: "LUBE-CH" },
     { id: "c3", brand: "HP", name: "Coolant Green", code: "CLNT-GRN" },
   ]);
-  const [consumableBrandsList, setConsumableBrandsList] = useState([
-    { id: "cb1", name: "HP" },
-    { id: "cb2", name: "HITECH" },
-    { id: "cb3", name: "MCLARINE" },
-    { id: "cb4", name: "BOSCH" },
-  ]);
-  const [customerSourcesList, setCustomerSourcesList] = useState([
-    { id: "cs1", company: "ANTIDOTE", gstin: "21AAMCS8857L1ZO", email: "info@antidote.co.in", contact: "9876543210", person: "A. Pradhan", address: "Raghunathpur", city: "Bhubaneswar", state: "Odisha", sms: "Yes", date: "2026-01-10" },
-    { id: "cs2", company: "RUBRIC PROJECT PRIVATE LIMITED", gstin: "21ABBCS1234F1ZO", email: "contact@rubric.com", contact: "9937122334", person: "S. Sen", address: "Damana", city: "Bhubaneswar", state: "Odisha", sms: "Yes", date: "2026-03-15" },
-  ]);
-  const [insuranceProvidersList, setInsuranceProvidersList] = useState([
-    { id: "ip1", name: "SBI GENERAL INSURANCE CO. LTD.", gstin: "21AAMCS8857L1ZO", address: "Bhubaneswar", contact: "9999999999", email: "support@sbigeneral.in" },
-    { id: "ip2", name: "HDFC General Insurance", gstin: "GSTIN123456", address: "Bhubaneswar", contact: "0123456789", email: "claims@hdfcergo.com" },
-  ]);
-  const [sparesMasterList, setSparesMasterList] = useState([
-    { id: "sm1", name: "Brake Shoe Front", code: "Spares" },
-    { id: "sm2", name: "Accelerator Cable", code: "Spares" },
-    { id: "sm3", name: "Engine Oil 1L", code: "Consumables" },
-  ]);
+  const [consumableBrandsList, setConsumableBrandsList] = useState<{id:string;name:string}[]>([]);
+  const [customerSourcesList, setCustomerSourcesList] = useState<any[]>([]);
+  const [insuranceProvidersList, setInsuranceProvidersList] = useState<any[]>([]);
+  const [sparesMasterList, setSparesMasterList] = useState<any[]>([]);
   const [vehicleCategoriesList, setVehicleCategoriesList] = useState([
     { id: "vc1", name: "BIKE" },
     { id: "vc2", name: "SCOOTY" },
     { id: "vc3", name: "SCOOTER" },
   ]);
-  const [vehicleModelsList, setVehicleModelsList] = useState([
-    { id: "vm1", brand: "Suzuki", model: "Access", variant: "SCOOTY" },
-    { id: "vm2", brand: "HERO", model: "KARIZMA", variant: "BIKE" },
-    { id: "vm3", brand: "HARLEY DAVIDSON", model: "X440", variant: "BIKE" },
-  ]);
-  const [workshopBranches, setWorkshopBranches] = useState([
-    { id: "4", name: "Bike Masters", address: "Raghunathpur", location: "RAGHUNATHPUR", pin: "751024", city: "Bhubaneswar", state: "Odisha", person: "Anil Dash", contact: "9876543210", email: "raghunathpur@bikemasters.com", tin: "TIN9988", company: "Bike Masters Pvt Ltd", cin: "CIN8877", serviceTax: "STAX8899" },
-    { id: "3", name: "Bike Masters", address: "Damana", location: "DAMANA", pin: "751016", city: "Bhubaneswar", state: "Odisha", person: "Subhashis Sen", contact: "9937123456", email: "damana@bikemasters.com", tin: "TIN9989", company: "Bike Masters Pvt Ltd", cin: "CIN8878", serviceTax: "STAX8900" },
-  ]);
-  const [auditLogsList, setAuditLogsList] = useState([
-    { id: "LOG-001", desc: "Vehicle Marked Done for OD-02-AX-1122", type: "Marked Done", category: "Vehicle Service", user: "Manoj Kumar", date: "2026-05-29 09:12:45" },
-    { id: "LOG-002", desc: "Estimation updated for OD-33-Y-9988", type: "Estimation", category: "Vehicle Service", user: "Anil Dash", date: "2026-05-29 09:20:11" },
-  ]);
+  const [vehicleModelsList, setVehicleModelsList] = useState<any[]>([]);
+  const [workshopBranches, setWorkshopBranches] = useState<any[]>([]);
+  const [auditLogsList, setAuditLogsList] = useState<any[]>([]);
   const [inventoryStockSummary, setInventoryStockSummary] = useState([
     { id: "is1", spareName: "Front Brake Shoe Assembly", brand: "Honda", model: "Activa H-Smart", variant: "SCOOTY", partBrand: "BOSCH", partNo: "BP-HON-098", totalQty: 100, consumedQty: 25, availableQty: 75, estimatedQty: 5, location: "Bin A-12" },
     { id: "is2", spareName: "Engine Oil 10W30 1L", brand: "TVS", model: "Apache", variant: "BIKE", partBrand: "HP", partNo: "OIL-HP-10W30", totalQty: 50, consumedQty: 12, availableQty: 38, estimatedQty: 2, location: "Oil Rack 3" },
@@ -626,6 +601,87 @@ export default function Home() {
     if (activeTab !== "Inventory Management" && activeTab !== "Inventory") return;
     apiFetch("/spare-parts/low-stock").then(r => r.ok ? r.json() : []).then(setLowStockAlerts).catch(() => {});
   }, [activeTab, currentUser?.garageId]);
+
+  // Fetch full spare parts list for inventory tab (full detail view)
+  useEffect(() => {
+    if (activeTab !== "Inventory Management" && activeTab !== "Inventory") return;
+    apiFetch("/spare-parts")
+      .then(r => r.ok ? r.json() : [])
+      .then((data: any[]) => {
+        setInventoryList(data.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          partNumber: p.partNumber || p.code || '—',
+          price: Number(p.sellingPrice || p.price || 0),
+          mrp: Number(p.mrp || p.price || 0),
+          stockQty: Number(p.currentStock ?? p.stockQty ?? 0),
+          minStockLevel: Number(p.minStockLevel ?? p.reorderLevel ?? 10),
+          hsnCode: p.hsnCode || p.hsn || '—',
+          category: p.category || 'General',
+          supplier: p.supplier || '—',
+          batches: p.batches || [],
+          transactions: p.transactions || []
+        })));
+      })
+      .catch(() => {});
+  }, [activeTab, currentUser?.garageId]);
+
+  // Fetch customer sources for System Config tab
+  useEffect(() => {
+    apiFetch("/customer-sources")
+      .then(r => r.ok ? r.json() : [])
+      .then((data: any[]) => {
+        if (data.length > 0) {
+          setCustomerSourcesList(data.map((s: any) => ({ id: s.id || s, name: typeof s === 'string' ? s : s.name })));
+        }
+      })
+      .catch(() => {});
+  }, [currentUser?.garageId]);
+
+  // Fetch spare parts master list for System Config tab
+  useEffect(() => {
+    apiFetch("/spare-parts")
+      .then(r => r.ok ? r.json() : [])
+      .then((data: any[]) => {
+        if (data.length > 0) {
+          setSparesMasterList(data.map((p: any) => ({ id: p.id, name: p.name, code: p.partNumber || p.code || '' })));
+        }
+      })
+      .catch(() => {});
+  }, [currentUser?.garageId]);
+
+  // Fetch vehicle brands+models for vehicle search typeahead
+  useEffect(() => {
+    Promise.all([
+      apiFetch("/vehicle-brands").then(r => r.ok ? r.json() : []),
+      apiFetch("/vehicle-models").then(r => r.ok ? r.json() : []),
+    ]).then(([brands, models]: [any[], any[]]) => {
+      const brandMap: Record<string, string> = {};
+      brands.forEach((b: any) => { brandMap[b.id] = b.name; });
+      const mapped = models.map((m: any) => ({
+        id: m.id,
+        brand: brandMap[m.brandId] || m.brand || '',
+        model: m.name || m.model || '',
+        category: m.category || 'Scooter',
+        variant: m.variant || ''
+      }));
+      if (mapped.length > 0) setVehicleModelsList(mapped);
+    }).catch(() => {});
+  }, [currentUser?.garageId]);
+
+  // Populate workshopBranches from current user session (branch info is already in JWT)
+  useEffect(() => {
+    if (!currentUser) return;
+    setWorkshopBranches([{
+      id: currentUser.garageCode || currentUser.garageId,
+      name: currentUser.garageName || currentUser.garageCode || 'Branch',
+      location: '',
+      pin: '',
+      city: '',
+      state: ''
+    }]);
+  }, [currentUser?.garageId]);
+
   const [techProductivityList, setTechProductivityList] = useState([
     { id: "tp1", jobId: "JOB-9981", vehicle: "OD-02-AX-1122", name: "Manoj Kumar", service: "CARBURETOR CLEAN", status: "Marked Done", start: "09:00 AM", stop: "09:45 AM", duration: "45 mins", speed: "45 mins", cost: 100, profit: 149 },
     { id: "tp2", jobId: "JOB-9982", vehicle: "OD-33-Y-9988", name: "Ramesh Naik", service: "SILENCER PAINT", status: "Marked Done", start: "10:15 AM", stop: "11:30 AM", duration: "75 mins", speed: "65 mins", cost: 150, profit: 99 },
@@ -642,85 +698,7 @@ export default function Home() {
   const [inventoryThresholdMode, setInventoryThresholdMode] = useState(false);
 
   // Inventory State Variables
-  const [inventoryList, setInventoryList] = useState<SparePart[]>([
-    {
-      id: "p1",
-      name: "Front Brake Shoe Assembly",
-      partNumber: "BP-HON-098",
-      price: 350,
-      mrp: 380,
-      stockQty: 45,
-      minStockLevel: 20,
-      hsnCode: "HSN-8708",
-      category: "Brakes",
-      supplier: "Lucas TVS",
-      batches: [
-        { batchNo: "BAT-BRK-001", qty: 30, purchasePrice: 280, expiryDate: "N/A", receivedDate: "12 May 2026" },
-        { batchNo: "BAT-BRK-002", qty: 15, purchasePrice: 290, expiryDate: "N/A", receivedDate: "20 May 2026" }
-      ],
-      transactions: [
-        { id: "T101", type: "purchase", qty: 50, date: "12 May 2026", reference: "PO-9081", details: "Purchased from Lucas Distributor" },
-        { id: "T102", type: "issue", qty: 5, date: "25 May 2026", reference: "JC-009", details: "Issued to Active ticket OD-05-AB-1234" }
-      ]
-    },
-    {
-      id: "p2",
-      name: "Engine Oil Premium 10W30",
-      partNumber: "SP-OIL-12",
-      price: 450,
-      mrp: 480,
-      stockQty: 8,
-      minStockLevel: 15,
-      hsnCode: "HSN-2710",
-      category: "Fluids",
-      supplier: "Castrol India",
-      batches: [
-        { batchNo: "BAT-OIL-99", qty: 8, purchasePrice: 380, expiryDate: "10 Dec 2028", receivedDate: "15 Apr 2026" }
-      ],
-      transactions: [
-        { id: "T201", type: "purchase", qty: 40, date: "15 Apr 2026", reference: "PO-8991", details: "Purchased from Castrol Depot" },
-        { id: "T202", type: "issue", qty: 32, date: "22 May 2026", reference: "Multiple Tickets", details: "Regular servicing oil replacements" }
-      ]
-    },
-    {
-      id: "p3",
-      name: "Spark Plug Champion Premium",
-      partNumber: "SPK-PLG-01",
-      price: 120,
-      mrp: 140,
-      stockQty: 3,
-      minStockLevel: 10,
-      hsnCode: "HSN-8511",
-      category: "Electricals",
-      supplier: "Bosch Auto",
-      batches: [
-        { batchNo: "BAT-SPK-04", qty: 3, purchasePrice: 90, expiryDate: "N/A", receivedDate: "10 Feb 2026" }
-      ],
-      transactions: [
-        { id: "T301", type: "purchase", qty: 20, date: "10 Feb 2026", reference: "PO-7712", details: "Standard intake replenishment" },
-        { id: "T302", type: "issue", qty: 17, date: "24 May 2026", reference: "Multiple Tickets", details: "Wear and tear changes" }
-      ]
-    },
-    {
-      id: "p4",
-      name: "Front Fork Pipe Set Assembly",
-      partNumber: "SP-FRK-12",
-      price: 2800,
-      mrp: 3000,
-      stockQty: 12,
-      minStockLevel: 5,
-      hsnCode: "HSN-8708",
-      category: "Suspension",
-      supplier: "Endurance Systems",
-      batches: [
-        { batchNo: "BAT-FRK-11", qty: 12, purchasePrice: 2200, expiryDate: "N/A", receivedDate: "05 May 2026" }
-      ],
-      transactions: [
-        { id: "T401", type: "purchase", qty: 15, date: "05 May 2026", reference: "PO-9901", details: "Restock heavy suspension units" },
-        { id: "T402", type: "issue", qty: 3, date: "22 May 2026", reference: "JC-012", details: "Accidental shock replacement repair" }
-      ]
-    }
-  ]);
+  const [inventoryList, setInventoryList] = useState<SparePart[]>([]);
 
   const [selectedPartId, setSelectedPartId] = useState<string>("p1");
   const [inventorySearchQuery, setInventorySearchQuery] = useState("");
@@ -990,13 +968,7 @@ export default function Home() {
   const [designationForm, setDesignationForm] = useState("");
 
   // Manage Users - Employee state
-  const [employees, setEmployees] = useState<Employee[]>([
-    { id: "76", workshopId: "Bike Masters", firstName: "OM PRAKASH", lastName: "DAS", username: "OMM", email: "manager@bikemasters.com", contact: "7978460890", designation: "Manager", pwdExpiry: "2026-12-01", mobileAuth: false, dob: "1991-05-15", address: "Bhubaneswar Hub" },
-    { id: "1", workshopId: "Bike Masters", firstName: "UTTAM KUMAR", lastName: "MAHATA", username: "UTTAM", email: "uttam@bikemasters.com", contact: "8293013480", designation: "Technician", pwdExpiry: "2027-12-31", mobileAuth: false },
-    { id: "2", workshopId: "Bike Masters", firstName: "ABHIJIT", lastName: "NAYAK", username: "ABINASH", email: "abhijit@bikemasters.com", contact: "7377189872", designation: "Supervisor", pwdExpiry: "2026-12-31", mobileAuth: false },
-    { id: "3", workshopId: "Bike Masters", firstName: "ASIT", lastName: "KUMAR BEHERA", username: "ASIT80", email: "asit@bikemasters.com", contact: "7681879872", designation: "Supervisor", pwdExpiry: "2029-01-01", mobileAuth: true },
-    { id: "4", workshopId: "Bike Masters", firstName: "ARUP", lastName: "BAYEN", username: "ARUP", email: "arup@bikemasters.com", contact: "7609929872", designation: "Supervisor", pwdExpiry: "2029-01-01", mobileAuth: true }
-  ]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("76");
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
@@ -1663,56 +1635,6 @@ export default function Home() {
   const [vehicleBrandsList, setVehicleBrandsList] = useState(['Honda', 'TVS', 'Bajaj', 'KTM', 'Yamaha', 'Suzuki', 'Hero']);
 
   // Known vehicles database for auto-population typeahead
-  const MOCK_KNOWN_VEHICLES = [
-    {
-      regNo: "OD-05-AB-1234",
-      name: "Aditya Pradhan",
-      phone: "+91 98765 43210",
-      email: "aditya@bikemaster.com",
-      address: "Plot 104, Saheed Nagar, Bhubaneswar, Odisha",
-      brand: "Honda",
-      model: "Activa 6G",
-      category: "Scooter",
-      variant: "Deluxe",
-      plateColor: "white",
-      chassisNo: "MD2A1234567890",
-      engineNo: "JA05E1234567",
-      regDate: "2024-05-15",
-      mfgYear: "2023"
-    },
-    {
-      regNo: "OD-02-XY-9876",
-      name: "Priya Sharma",
-      phone: "+91 87654 32109",
-      email: "priya@gmail.com",
-      address: "Patia, Bhubaneswar, Odisha",
-      brand: "TVS",
-      model: "Jupiter 125",
-      category: "Scooter",
-      variant: "Disc",
-      plateColor: "white",
-      chassisNo: "MD3B9876543210",
-      engineNo: "JA06E9876543",
-      regDate: "2025-02-10",
-      mfgYear: "2024"
-    },
-    {
-      regNo: "MH-12-EV-2026",
-      name: "Rohan Deshmukh",
-      phone: "+91 76543 20987",
-      email: "rohan@evlife.in",
-      address: "Shivaji Nagar, Pune, Maharashtra",
-      brand: "TVS",
-      model: "iQube Electric",
-      category: "Electric Scooter",
-      variant: "S Edition",
-      plateColor: "green",
-      chassisNo: "MD4C2026112233",
-      engineNo: "EV-MTR-8899",
-      regDate: "2026-01-20",
-      mfgYear: "2026"
-    }
-  ];
 
   // Inline modals control states
   const [isNewVehicleModalOpen, setIsNewVehicleModalOpen] = useState(false);
@@ -1773,18 +1695,6 @@ export default function Home() {
     triggerToast(`Switched to ${nextTheme === "dark" ? "Dark" : "Light"} Mode`, "info");
   };
 
-  // Mock vehicle database for typeahead search in Modal
-  const MOCK_VEHICLE_DATABASE = [
-    { brand: "Honda", model: "Activa 6G", category: "Scooter", variant: "Deluxe" },
-    { brand: "Honda", model: "Activa 125", category: "Scooter", variant: "Standard" },
-    { brand: "TVS", model: "Jupiter 125", category: "Scooter", variant: "Disc" },
-    { brand: "TVS", model: "Ntorq 125", category: "Scooter", variant: "Race Edition" },
-    { brand: "Bajaj", model: "Pulsar 150", category: "Motorcycle", variant: "Neon" },
-    { brand: "Bajaj", model: "Pulsar NS200", category: "Motorcycle", variant: "ABS" },
-    { brand: "KTM", model: "Duke 200", category: "Motorcycle", variant: "Standard" },
-    { brand: "KTM", model: "RC 390", category: "Motorcycle", variant: "GP Edition" },
-    { brand: "Yamaha", model: "R15 V4", category: "Motorcycle", variant: "Racing Blue" }
-  ];
 
   const handleVehicleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -1797,36 +1707,39 @@ export default function Home() {
     }
   };
 
-  const selectVehicleSuggestion = (vehicle: typeof MOCK_VEHICLE_DATABASE[0]) => {
-    setNewCustomerForm((prev) => ({
-      ...prev,
-      brand: vehicle.brand,
-      model: vehicle.model,
-      category: vehicle.category,
-      variant: vehicle.variant
-    }));
-    setVehicleSearchText(`${vehicle.brand} ${vehicle.model} - ${vehicle.variant}`);
+  const selectVehicleSuggestion = (vehicle: any) => {
+    const brand = vehicle.brand || '';
+    const model = vehicle.model || vehicle.name || '';
+    const category = vehicle.category || 'Scooter';
+    const variant = vehicle.variant || '';
+    setNewCustomerForm((prev) => ({ ...prev, brand, model, category, variant }));
+    setVehicleSearchText(`${brand} ${model}${variant ? ` - ${variant}` : ''}`);
     setShowVehicleSuggestions(false);
-    triggerToast(`Selected ${vehicle.brand} ${vehicle.model}! Auto-populated fields.`, "success");
+    triggerToast(`Selected ${brand} ${model}! Auto-populated fields.`, "success");
   };
 
   // Typeahead search for existing known vehicle registrations
-  const [matchingRegNoList, setMatchingRegNoList] = useState<typeof MOCK_KNOWN_VEHICLES>([]);
+  const [matchingRegNoList, setMatchingRegNoList] = useState<any[]>([]);
   const [showRegSuggestions, setShowRegSuggestions] = useState(false);
 
   const handleRegNoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const text = e.target.value.toUpperCase();
     setNewCustomerForm(prev => ({ ...prev, regNo: text }));
     if (text.trim().length >= 3) {
-      const filtered = MOCK_KNOWN_VEHICLES.filter(v => v.regNo.includes(text));
-      setMatchingRegNoList(filtered);
-      setShowRegSuggestions(filtered.length > 0);
+      apiFetch(`/vehicles/search?q=${encodeURIComponent(text)}`)
+        .then(r => r.ok ? r.json() : [])
+        .then((results: any[]) => {
+          setMatchingRegNoList(results);
+          setShowRegSuggestions(results.length > 0);
+        })
+        .catch(() => setShowRegSuggestions(false));
     } else {
       setShowRegSuggestions(false);
+      setMatchingRegNoList([]);
     }
   };
 
-  const selectRegNoSuggestion = (veh: typeof MOCK_KNOWN_VEHICLES[0]) => {
+  const selectRegNoSuggestion = (veh: any) => {
     setNewCustomerForm(prev => ({
       ...prev,
       regNo: veh.regNo,
@@ -7766,10 +7679,10 @@ export default function Home() {
                       {/* Suggestions list popup */}
                       {showVehicleSuggestions && (
                         <div className="absolute left-0 right-0 top-16 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 p-1.5 space-y-0.5 max-h-48 overflow-y-auto">
-                          {MOCK_VEHICLE_DATABASE.filter(v =>
-                            v.brand.toLowerCase().includes(vehicleSearchText.toLowerCase()) ||
-                            v.model.toLowerCase().includes(vehicleSearchText.toLowerCase())
-                          ).map((v, idx) => (
+                          {vehicleModelsList.filter((v: any) =>
+                            (v.brand || '').toLowerCase().includes(vehicleSearchText.toLowerCase()) ||
+                            (v.model || v.name || '').toLowerCase().includes(vehicleSearchText.toLowerCase())
+                          ).map((v: any, idx: number) => (
                             <div
                               key={idx}
                               onClick={() => selectVehicleSuggestion(v)}
