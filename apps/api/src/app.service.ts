@@ -1067,13 +1067,16 @@ export class AppService {
     completion: number;
     overallDiscount: number;
   }) {
+    // Resolve garageId from the job card so inventory transactions use the correct branch
+    const entity = await this.jobCardRepo.findOneBy({ jobCardNo });
+    const garageId = entity?.garageId;
+
     const [spares, services] = await Promise.all([
-      this.saveSpareItems(jobCardNo, body.spares),
+      this.saveSpareItems(jobCardNo, body.spares, garageId),
       this.saveServiceItems(jobCardNo, body.services),
       this.saveComplaints(jobCardNo, body.complaints),
     ]);
 
-    const entity = await this.jobCardRepo.findOneBy({ jobCardNo });
     if (entity) {
       await this.jobCardRepo.update(entity.id, {
         isEstimated: body.isEstimated,

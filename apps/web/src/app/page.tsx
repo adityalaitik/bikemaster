@@ -2012,13 +2012,9 @@ export default function Home() {
 
   // Role → allowed nav tabs
   const ROLE_TABS: Record<string, string[]> = {
-    super_admin:     ["*"],
-    org_admin:       ["*"],
     garage_manager:  ["*"],
     service_advisor: ["Dashboard","Service Queue","Customers","CRM","Inventory Management","View Service History"],
     technician:      ["Dashboard","Service Queue"],
-    cashier:         ["Dashboard","Service Queue","Payments","Report By Invoices"],
-    viewer:          ["Dashboard","BI Analytics","GST Filing Reports","By Insurance Claim","Report By Invoices"],
   };
 
   const canAccessTab = (tab: string) => {
@@ -2030,13 +2026,9 @@ export default function Home() {
 
   // Role display label
   const ROLE_LABELS: Record<string, string> = {
-    super_admin:    "Super Admin",
-    org_admin:      "Org Admin",
-    garage_manager: "Garage Manager",
+    garage_manager: "Manager",
     service_advisor:"Service Advisor",
     technician:     "Technician",
-    cashier:        "Cashier",
-    viewer:         "Viewer",
   };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -2046,31 +2038,16 @@ export default function Home() {
       return;
     }
 
-    // Offline fallback users (mirrors API DEMO_USERS)
+    // Offline fallback users — only manager, advisor, technician roles
+    const BBR = { garageId: "11111111-1111-1111-1111-111111111111", garageCode: "BBR-001", garageName: "Bhubaneswar Branch" };
+    const PTI = { garageId: "33333333-3333-3333-3333-000000000001", garageCode: "PTI-003", garageName: "Patia Branch" };
     const FALLBACK_USERS = [
-      { username: "admin",        password: "admin123",   role: "super_admin",    name: "Aditya Pradhan", id: "u1",
-        garageCode: "BBR-001", garageId: "11111111-1111-1111-1111-111111111111", garageName: "Bhubaneswar Branch",
-        garages: [
-          { garageId: "11111111-1111-1111-1111-111111111111", garageCode: "BBR-001", garageName: "Bhubaneswar Branch" },
-          { garageId: "33333333-3333-3333-3333-000000000001", garageCode: "PTI-003", garageName: "Patia Branch" },
-        ] },
-      { username: "manager",      password: "manager123", role: "garage_manager",  name: "Subhashis Sen",  id: "u2",
-        garageCode: "BBR-001", garageId: "11111111-1111-1111-1111-111111111111", garageName: "Bhubaneswar Branch", garages: [] },
-      { username: "advisor",      password: "advisor123", role: "service_advisor", name: "Priya Sharma",   id: "u3",
-        garageCode: "BBR-001", garageId: "11111111-1111-1111-1111-111111111111", garageName: "Bhubaneswar Branch", garages: [] },
-      { username: "tech",         password: "tech123",    role: "technician",      name: "Ravi Kumar",     id: "u4",
-        garageCode: "BBR-001", garageId: "11111111-1111-1111-1111-111111111111", garageName: "Bhubaneswar Branch", garages: [] },
-      { username: "cashier",      password: "cashier123", role: "cashier",         name: "Anita Das",      id: "u5",
-        garageCode: "BBR-001", garageId: "11111111-1111-1111-1111-111111111111", garageName: "Bhubaneswar Branch", garages: [] },
-      // ── Patia branch ─────────────────────────────────────────────────────────
-      { username: "manager.ptia", password: "manager123", role: "garage_manager",  name: "Deepak Mohanty", id: "u6",
-        garageCode: "PTI-003", garageId: "33333333-3333-3333-3333-000000000001", garageName: "Patia Branch", garages: [] },
-      { username: "advisor.ptia", password: "advisor123", role: "service_advisor", name: "Sneha Pattnaik", id: "u7",
-        garageCode: "PTI-003", garageId: "33333333-3333-3333-3333-000000000001", garageName: "Patia Branch", garages: [] },
-      { username: "tech.ptia",    password: "tech123",    role: "technician",      name: "Bikash Nayak",   id: "u8",
-        garageCode: "PTI-003", garageId: "33333333-3333-3333-3333-000000000001", garageName: "Patia Branch", garages: [] },
-      { username: "cashier.ptia", password: "cashier123", role: "cashier",         name: "Kavita Rath",    id: "u9",
-        garageCode: "PTI-003", garageId: "33333333-3333-3333-3333-000000000001", garageName: "Patia Branch", garages: [] },
+      { username: "manager",      password: "manager123", role: "garage_manager",  name: "Subhashis Sen",  id: "u2", ...BBR, garages: [] },
+      { username: "advisor",      password: "advisor123", role: "service_advisor", name: "Priya Sharma",   id: "u3", ...BBR, garages: [] },
+      { username: "tech",         password: "tech123",    role: "technician",      name: "Ravi Kumar",     id: "u4", ...BBR, garages: [] },
+      { username: "manager.ptia", password: "manager123", role: "garage_manager",  name: "Deepak Mohanty", id: "u6", ...PTI, garages: [] },
+      { username: "advisor.ptia", password: "advisor123", role: "service_advisor", name: "Sneha Pattnaik", id: "u7", ...PTI, garages: [] },
+      { username: "tech.ptia",    password: "tech123",    role: "technician",      name: "Bikash Nayak",   id: "u8", ...PTI, garages: [] },
     ];
 
     const saveSession = (user: { id: string; name: string; username: string; role: string; garageCode: string; garageId: string; garageName?: string }, token: string) => {
@@ -3750,12 +3727,12 @@ export default function Home() {
         const activities = recentJobs.length > 0 ? recentJobs.map((j, i) => ({
           id: i + 1,
           text: j.status === 'Under Servicing' || j.status === 'WIP'
-            ? `${j.technicianName || 'Technician'} servicing ${j.vehicleNo} (${j.jobCardNo})`
+            ? `${j.technicianName || j.technician || 'Technician'} servicing ${j.vehicleNo} (${j.jobCardNo || j.id})`
             : j.status === 'Invoice Generated' || j.status === 'Payment Received'
             ? `Invoice generated for ${j.customerName} (${j.vehicleNo})`
             : j.status === 'Delivered'
             ? `${j.customerName} vehicle ${j.vehicleNo} delivered`
-            : `${j.jobCardNo}: ${j.customerName} — ${j.status}`,
+            : `${j.jobCardNo || j.id}: ${j.customerName} — ${j.status}`,
           time: 'recent',
           type: j.status === 'Under Servicing' || j.status === 'WIP' ? 'service'
             : j.status === 'Invoice Generated' || j.status === 'Payment Received' ? 'invoice'
