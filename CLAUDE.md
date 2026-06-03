@@ -13,7 +13,7 @@ Turborepo monorepo with npm workspaces:
 - `apps/api/` — NestJS REST API (port 4000, Swagger at `/api-docs`)
 - `apps/web/` — Next.js 14 frontend (port 3000, App Router)
 - `packages/shared-types/` — TypeScript type definitions shared between apps
-- `db/` — PostgreSQL DDL, seed data, RLS policies
+- `db/` — MySQL schema, seed data, and management scripts
 
 ## Commands
 
@@ -26,10 +26,12 @@ npm run lint         # Lint all apps
 npm run clean        # Clean all dist/.next outputs
 ```
 
-### Infrastructure
+### Database
 ```bash
-docker-compose up -d         # Start PostgreSQL (5432) and Redis (6379)
-docker-compose down          # Stop services
+npm run db:setup     # First-time setup: create DB + user + schema + seeds
+npm run db:dump      # After a schema change: capture live DB → update db/ files
+npm run db:apply     # After pulling someone else's schema change: sync your local DB
+npm run db:reset     # DESTRUCTIVE: drop everything and rebuild from db/ files
 ```
 
 ### Individual apps
@@ -59,11 +61,11 @@ Next.js (localhost:3000)
     ↓ HTTP/REST (CORS configured)
 NestJS API (localhost:4000)
     ↓
-PostgreSQL (localhost:5432) + Redis (localhost:6379)
+MySQL 8.x (localhost:3306, database: bikemaster)
 ```
 
 ### API (`apps/api/`)
-Single-module NestJS app — all logic currently lives in `app.controller.ts` (endpoints) and `app.service.ts` (business logic). Swagger docs auto-generated. No ORM yet; direct SQL queries expected.
+Single-module NestJS app — all logic currently lives in `app.controller.ts` (endpoints) and `app.service.ts` (business logic). Swagger docs auto-generated. Uses TypeORM with `synchronize: false` — all schema changes must go through `db/scripts/dump.sh`.
 
 ### Web (`apps/web/`)
 Next.js App Router with two main routes:
@@ -77,17 +79,35 @@ Central TypeScript interfaces used by both apps. When adding new API contracts, 
 
 ## Database
 
-PostgreSQL 15 with 40+ tables across a 19-tier schema. Key design patterns:
-- UUID primary keys everywhere (`uuid-ossp` extension)
-- Row-Level Security (RLS) for multi-tenancy — tenant isolation via `app.current_garage_id` session variable
-- `DECIMAL(12,2)` for all financial values
-- `JSONB` for flexible fields (inspection checklists, audit log old/new values, template variables)
+MySQL 8.x with 48 tables. Connection: `admin:LeOmm@8769@localhost:3306/bikemaster`.
 
-Schema files:
-- `db/schema/ddl_create.sql` — Full DDL
-- `db/dml/seed_data.sql` — Sample data (org, garages, users, vehicle brands, tax rates)
-- `db/dcl/permissions.sql` — RLS policies
-- `db/schema/ddl_rollback.sql` — Rollback script
+Key design patterns:
+- UUID primary keys everywhere
+- `DECIMAL(12,2)` for all financial values
+- `JSON` columns for flexible fields (inspection checklists, status history, audit logs)
+- TypeORM entities in `apps/api/src/entities/` — `synchronize: false`, so schema is managed manually
+
+### db/ folder layout
+```
+db/
+  schema/schema.sql     ← AUTO-GENERATED full DDL (source of truth — never edit by hand)
+  seeds/seed_data.sql   ← AUTO-GENERATED reference data (brands, services, parts, users…)
+  scripts/
+    setup.sh            ← first-time: create DB + user + schema + seeds
+    dump.sh             ← capture live DB → update schema.sql + seed_data.sql
+    apply.sh            ← apply schema.sql + seeds to existing DB (safe, no data loss)
+    reset.sh            ← DESTRUCTIVE: drop everything and rebuild from scratch
+```
+
+### Schema change workflow
+1. Make the change in MySQL (via TypeORM entity or direct SQL)
+2. `npm run db:dump` — updates `schema.sql` and `seed_data.sql`
+3. Commit both files so other devs can sync with `npm run db:apply`
+
+### First-time setup (after cloning)
+```bash
+npm run db:setup   # creates DB, user, applies schema + seeds in one step
+```
 
 ### Key table groups
 | Domain | Tables |

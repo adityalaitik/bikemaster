@@ -1,597 +1,1035 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
+import { Customer } from './entities/customer.entity';
+import { Vehicle } from './entities/vehicle.entity';
+import { JobCardEntity } from './entities/job-card.entity';
+import { VehicleBrandEntity } from './entities/vehicle-brand.entity';
+import { VehicleModelEntity } from './entities/vehicle-model.entity';
+import { SparePartEntity } from './entities/spare-part.entity';
+import { ServiceEntity } from './entities/service.entity';
+import { JobSpareItemEntity } from './entities/job-spare-item.entity';
+import { JobServiceItemEntity } from './entities/job-service-item.entity';
+import { EmployeeEntity } from './entities/employee.entity';
+import { InventoryBatchEntity } from './entities/inventory-batch.entity';
+import { CustomerSourceEntity } from './entities/customer-source.entity';
+import { GarageEntity } from './entities/garage.entity';
+import { JobComplaintEntity } from './entities/job-complaint.entity';
+import { PackageEntity } from './entities/package.entity';
+import { PackageItemEntity } from './entities/package-item.entity';
+import { OfferEntity } from './entities/offer.entity';
+import { InvoiceEntity } from './entities/invoice.entity';
+import { InventoryTransactionEntity } from './entities/inventory-transaction.entity';
 
-export interface Complaint {
-  text: string;
-  finding: string;
-  action: string;
-}
-
-export interface SpareItem {
-  name: string;
-  qty: number;
-  price: number;
-  mrp: number;
-  hsn: string;
-  code: string;
-  status: string;
-}
-
-export interface ServiceItem {
-  name: string;
-  rate: number;
-  hsn: string;
-  code: string;
-  status: string;
-}
-
-export interface TimelineItem {
-  time: string;
-  title: string;
-  desc: string;
-}
+export interface Complaint { text: string; finding: string; action: string; }
+export interface SpareItem { id?: string; name: string; qty: number; price: number; mrp: number; hsn: string; code: string; status: string; billedTo: 'customer' | 'insurance'; }
+export interface ServiceItem { id?: string; name: string; rate: number; hsn: string; code: string; status: string; billedTo: 'customer' | 'insurance'; }
+export interface TimelineEntry { time: string; title: string; desc: string; }
 
 export interface JobCard {
+  id: string; vehicleNo: string; brandModel: string; customerName: string; phone: string;
+  kms: number; completion: number; status: string; advisor: string; technician: string;
+  urgency: string; estimate: number; paid: number; due: number; serviceType: string;
+  date: string; complaints: Complaint[]; spares: SpareItem[]; services: ServiceItem[];
+  timeline: TimelineEntry[]; isEstimated?: boolean; isStatusFilled?: boolean; overallDiscount?: number; rating?: number;
+  paymentBreakdown?: { card: number; cash: number; cheque: number; other: number; remarks: string } | null;
+  statusNote?: string;
+}
+
+export interface VehicleBrand { id: string; name: string; }
+export interface VehicleModel { id: string; brandId: string; name: string; category: string; variant: string; }
+export interface Employee { id: string; name: string; role: string; }
+export interface SparePartMaster { id: string; name: string; partNumber: string; price: number; mrp: number; stockQty: number; hsnCode: string; brand?: string; model?: string; variant?: string; location?: string; }
+export interface InventoryStockDto {
   id: string;
+  spareName: string;
+  brand: string;
+  model: string;
+  variant: string;
+  partBrand: string;
+  partNo: string;
+  totalQty: number;
+  consumedQty: number;
+  availableQty: number;
+  estimatedQty: number;
+  location: string;
+}
+export interface ServiceMaster { id: string; name: string; code: string; rate: number; sacCode: string; category?: string; }
+export interface ComplaintDto { text: string; finding: string; action: string; }
+export interface PackageItemDto { type: 'spare' | 'service'; id: string; name: string; code: string; qty: number; price: number; mrp: number; hsn: string; }
+export interface PackageDto { id: string; name: string; description: string; totalPrice: number; spares: PackageItemDto[]; services: PackageItemDto[]; }
+export interface OfferDto { id: string; title: string; description: string; offerType: string; discountValue: number; endDate: string; }
+export interface InvoiceDto { invoiceNo: string; jobCardNo: string; customerName: string; vehicleNo: string; brandModel: string; subtotal: number; discountAmount: number; taxAmount: number; totalAmount: number; customerAmount: number; insuranceAmount: number; }
+export interface InvoiceReportDto {
+  id: string;
+  invoiceNo: string;
+  date: string;
+  customerName: string;
+  gstin: string;
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
+  discountAmount: number;
+  insuranceAmount: number;
+  customerAmount: number;
+  paidAmount: number;
+  dueAmount: number;
+  type: string;
   vehicleNo: string;
   brandModel: string;
-  customerName: string;
   phone: string;
-  kms: number;
-  completion: number;
-  status: string;
-  advisor: string;
-  technician: string;
-  urgency: string;
-  estimate: number;
-  paid: number;
-  due: number;
-  serviceType: string;
-  date: string;
-  complaints: Complaint[];
-  spares: SpareItem[];
-  services: ServiceItem[];
-  timeline: TimelineItem[];
+  arrivalDate: string;
+  jobCardNo: string;
 }
 
-export interface VehicleBrand {
-  id: string;
-  name: string;
-  logoUrl?: string;
+export interface VehicleHistoryRow {
+  invoiceNo: string;
+  arrivalDate: string;
+  kmsDriven: number;
+  taxOnServices: number;
+  taxOnParts: number;
+  spares: number;
+  labours: number;
+  discount: number;
+  totalAmount: number;
+  totalPaid: number;
+  dueAmount: number;
+  techName: string;
+  techFeedback: string;
+  customerFeedback: string;
+  jobCardNo: string;
 }
 
-export interface VehicleModel {
-  id: string;
-  brandId: string;
-  name: string;
-  category: string;
-  variant: string;
-}
+const STATUS_TO_UI: Record<string, string> = {
+  under_servicing: 'Under Servicing',
+  next_day_delivery: 'Next Day Delivery',
+  upcoming_delivery: 'Upcoming Delivery',
+  ready_for_delivery: 'Ready for Delivery',
+  payment_processing: 'Payment Processing',
+  completed: 'Completed',
+  draft: 'Draft',
+  client_agreed: 'Client Agreed',
+  work_in_progress: 'Work in Progress',
+  work_on_hold: 'Work on Hold',
+  work_completed: 'Work Completed',
+  out_for_delivery: 'Out for Delivery',
+  delivered: 'Delivered',
+};
 
-export interface Employee {
-  id: string;
-  name: string;
-  role: string; // technician, supervisor, advisor
-}
+const STATUS_TO_DB: Record<string, string> = {
+  'Under Servicing': 'under_servicing',
+  'Next Day Delivery': 'next_day_delivery',
+  'Upcoming Delivery': 'upcoming_delivery',
+  'Ready for Delivery': 'ready_for_delivery',
+  'Payment Processing': 'payment_processing',
+  'Completed': 'completed',
+  'Delivered': 'delivered',
+  'Draft': 'draft',
+  'Client Agreed': 'client_agreed',
+  'Work in Progress': 'work_in_progress',
+  'Work on Hold': 'work_on_hold',
+  'Work Completed': 'work_completed',
+  'Out for Delivery': 'out_for_delivery',
+};
 
-export interface SparePartMaster {
-  id: string;
-  name: string;
-  partNumber: string;
-  price: number;
-  mrp: number;
-  stockQty: number;
-  hsnCode: string;
-}
+const STATUS_COMPLETION: Record<string, number> = {
+  client_agreed: 30,
+  work_in_progress: 50,
+  work_on_hold: 45,
+  work_completed: 80,
+  out_for_delivery: 90,
+  delivered: 100,
+  ready_for_delivery: 85,
+  payment_processing: 70,
+  completed: 100,
+};
 
-export interface ServiceMaster {
-  id: string;
-  name: string;
-  code: string;
-  rate: number;
-  sacCode: string;
-}
+const EMPLOYEE_TYPE_TO_ROLE: Record<string, string> = {
+  service_advisor: 'advisor',
+  supervisor: 'advisor',
+  technician: 'technician',
+};
 
 @Injectable()
 export class AppService {
-  // In-Memory Database collections
-  private brands: VehicleBrand[] = [
-    { id: 'b1', name: 'Honda' },
-    { id: 'b2', name: 'TVS' },
-    { id: 'b3', name: 'Bajaj' },
-    { id: 'b4', name: 'KTM' },
-    { id: 'b5', name: 'Yamaha' }
-  ];
+  constructor(
+    @InjectRepository(Customer) private customerRepo: Repository<Customer>,
+    @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(JobCardEntity) private jobCardRepo: Repository<JobCardEntity>,
+    @InjectRepository(VehicleBrandEntity) private brandRepo: Repository<VehicleBrandEntity>,
+    @InjectRepository(VehicleModelEntity) private modelRepo: Repository<VehicleModelEntity>,
+    @InjectRepository(SparePartEntity) private sparesRepo: Repository<SparePartEntity>,
+    @InjectRepository(ServiceEntity) private servicesRepo: Repository<ServiceEntity>,
+    @InjectRepository(JobSpareItemEntity) private jobSparesRepo: Repository<JobSpareItemEntity>,
+    @InjectRepository(JobServiceItemEntity) private jobServicesRepo: Repository<JobServiceItemEntity>,
+    @InjectRepository(EmployeeEntity) private employeeRepo: Repository<EmployeeEntity>,
+    @InjectRepository(InventoryBatchEntity) private batchRepo: Repository<InventoryBatchEntity>,
+    @InjectRepository(CustomerSourceEntity) private sourceRepo: Repository<CustomerSourceEntity>,
+    @InjectRepository(GarageEntity) private garageRepo: Repository<GarageEntity>,
+    @InjectRepository(JobComplaintEntity) private complaintRepo: Repository<JobComplaintEntity>,
+    @InjectRepository(PackageEntity) private packageRepo: Repository<PackageEntity>,
+    @InjectRepository(PackageItemEntity) private packageItemRepo: Repository<PackageItemEntity>,
+    @InjectRepository(OfferEntity) private offerRepo: Repository<OfferEntity>,
+    @InjectRepository(InvoiceEntity) private invoiceRepo: Repository<InvoiceEntity>,
+    @InjectRepository(InventoryTransactionEntity) private txnRepo: Repository<InventoryTransactionEntity>,
+  ) {}
 
-  private models: VehicleModel[] = [
-    { id: 'm1', brandId: 'b1', name: 'Activa 6G', category: 'Scooter', variant: 'Deluxe' },
-    { id: 'm2', brandId: 'b1', name: 'Activa 125', category: 'Scooter', variant: 'Standard' },
-    { id: 'm3', brandId: 'b2', name: 'Jupiter 125', category: 'Scooter', variant: 'Disc' },
-    { id: 'm4', brandId: 'b2', name: 'Ntorq 125', category: 'Scooter', variant: 'Race Edition' },
-    { id: 'm5', brandId: 'b3', name: 'Pulsar 150', category: 'Motorcycle', variant: 'Neon' },
-    { id: 'm6', brandId: 'b4', name: 'Duke 200', category: 'Motorcycle', variant: 'Standard' },
-    { id: 'm7', brandId: 'b5', name: 'R15 V4', category: 'Motorcycle', variant: 'Racing Blue' }
-  ];
+  getHello(): string { return 'BikeMasters API v1 - Database Enabled'; }
 
-  private employees: Employee[] = [
-    { id: 'e1', name: 'Subhashis Sen', role: 'advisor' },
-    { id: 'e2', name: 'Manoj Kumar', role: 'technician' },
-    { id: 'e3', name: 'Ramesh Naik', role: 'technician' },
-    { id: 'e4', name: 'Sanjay Rout', role: 'technician' },
-    { id: 'e5', name: 'Anil Dash', role: 'advisor' }
-  ];
+  // ── Complaints ────────────────────────────────────────────────────────────
+  async getComplaints(jobCardNo: string): Promise<ComplaintDto[]> {
+    const jc = await this.jobCardRepo.findOneBy({ jobCardNo });
+    if (!jc) return [];
+    const rows = await this.complaintRepo.findBy({ jobCardId: jc.id });
+    return rows.map(r => ({ text: r.complaintText, finding: r.workshopFinding || '', action: this.dbActionToFrontend(r.action) }));
+  }
 
-  private spareParts: SparePartMaster[] = [
-    { id: 'p1', name: 'Front Brake Shoe Assembly', partNumber: 'BP-HON-098', price: 350, mrp: 380, stockQty: 45, hsnCode: 'HSN-8708' },
-    { id: 'p2', name: 'Engine Oil Premium 10W30 (800ml)', partNumber: 'SP-OIL-12', price: 450, mrp: 480, stockQty: 120, hsnCode: 'HSN-2710' },
-    { id: 'p3', name: 'Spark Plug Champion Premium', partNumber: 'SPK-PLG-01', price: 120, mrp: 140, stockQty: 85, hsnCode: 'HSN-8511' },
-    { id: 'p4', name: 'Bajaj Pulsar Front Fender (Black)', partNumber: 'SP-FND-43', price: 1200, mrp: 1250, stockQty: 8, hsnCode: 'HSN-8708' },
-    { id: 'p5', name: 'Front Fork Pipe Set Assembly', partNumber: 'SP-FRK-12', price: 2800, mrp: 3000, stockQty: 4, hsnCode: 'HSN-8708' },
-    { id: 'p6', name: 'KTM Duke 200 Clutch Plate Kit', partNumber: 'SP-CLT-22', price: 1800, mrp: 1950, stockQty: 6, hsnCode: 'HSN-8708' },
-    { id: 'p7', name: 'Rear LED Turn Indicator (Pair)', partNumber: 'SP-IND-04', price: 450, mrp: 480, stockQty: 15, hsnCode: 'HSN-8512' }
-  ];
+  async saveComplaints(jobCardNo: string, complaints: ComplaintDto[]): Promise<void> {
+    const jc = await this.jobCardRepo.findOneBy({ jobCardNo });
+    if (!jc) return;
+    await this.complaintRepo.delete({ jobCardId: jc.id });
+    if (!complaints.length) return;
+    const entities = complaints.map(c => this.complaintRepo.create({
+      jobCardId: jc.id,
+      complaintText: c.text,
+      workshopFinding: c.finding || undefined,
+      action: this.frontendActionToDb(c.action) as any,
+      isRejected: c.action === 'declined',
+    }));
+    await this.complaintRepo.save(entities);
+  }
 
-  private servicesMaster: ServiceMaster[] = [
-    { id: 's1', name: 'General Service Standard Labor', code: 'SRV-GEN-01', rate: 650, sacCode: 'SAC-9987' },
-    { id: 's2', name: 'Express Washing & Polishing Bundle', code: 'SRV-WSH-02', rate: 400, sacCode: 'SAC-9987' },
-    { id: 's3', name: 'Fork Alignment and Straightening', code: 'SRV-FRK-01', rate: 600, sacCode: 'SAC-9987' },
-    { id: 's4', name: 'Accidental Body Fitting Labor', code: 'SRV-LAB-04', rate: 800, sacCode: 'SAC-9987' },
-    { id: 's5', name: 'Clutch Housing Overhaul Labor', code: 'SRV-LAB-02', rate: 550, sacCode: 'SAC-9987' },
-    { id: 's6', name: 'Chain Lubrication & Adjustment', code: 'SRV-CHN-01', rate: 150, sacCode: 'SAC-9987' }
-  ];
+  private frontendActionToDb(action: string): string {
+    const map: Record<string, string> = { repair_now: 'repair_now', replace_now: 'repair_now', observe: 'monitor', declined: 'rejected' };
+    return map[action] || 'repair_now';
+  }
 
-  private customerSources: string[] = ['Walk-in', 'Referral', 'Online Booking', 'Facebook', 'Google Search'];
+  private dbActionToFrontend(action: string): string {
+    const map: Record<string, string> = { repair_now: 'repair_now', repair_later: 'repair_now', inform_customer: 'observe', monitor: 'observe', rejected: 'declined' };
+    return map[action] || 'repair_now';
+  }
 
-  private jobs: JobCard[] = [
-    {
-      id: "JC-BBR-2026-00123",
-      vehicleNo: "OD-05-AB-1234",
-      brandModel: "Honda Activa 6G",
-      customerName: "Aditya Pradhan",
-      phone: "+91 98765 43210",
-      kms: 12450,
-      completion: 75,
-      status: "Under Servicing",
-      advisor: "Subhashis Sen",
-      technician: "Manoj Kumar",
-      urgency: "High",
-      estimate: 1450,
-      paid: 0,
-      due: 1450,
-      serviceType: "Regular",
-      date: "29 May 2026",
-      complaints: [
-        { text: "Engine making heavy noise on acceleration", finding: "Loose timing chain and worn out tensioner guide", action: "repair_now" },
-        { text: "Rear brake lever extremely loose", finding: "Brake shoe worn down to limit", action: "repair_now" }
-      ],
-      spares: [
-        { name: "Front Brake Shoe Assembly", qty: 1, price: 350, mrp: 380, hsn: "HSN-8708", code: "SP-BRK-09", status: "issued" },
-        { name: "Engine Oil Premium 10W30 (800ml)", qty: 1, price: 450, mrp: 480, hsn: "HSN-2710", code: "SP-OIL-12", status: "issued" }
-      ],
-      services: [
-        { name: "General Service Standard Labor", rate: 650, hsn: "SAC-9987", code: "SRV-GEN-01", status: "completed" }
-      ],
-      timeline: [
-        { time: "09:30 AM", title: "Job Card Created", desc: "Vehicle checked in by Advisor Subhashis Sen" },
-        { time: "10:15 AM", title: "Inspection Completed", desc: "101-Point inspection completed by Manoj Kumar" },
-        { time: "11:00 AM", title: "Estimation Approved", desc: "Customer approved estimate via WhatsApp link" },
-        { time: "01:30 PM", title: "Servicing In-Progress", desc: "Timing chain replacement under progress" }
-      ]
-    },
-    {
-      id: "JC-BBR-2026-00124",
-      vehicleNo: "OD-02-XY-9876",
-      brandModel: "TVS Jupiter 125",
-      customerName: "Priya Sharma",
-      phone: "+91 87654 32109",
-      kms: 8900,
-      completion: 100,
-      status: "Ready for Delivery",
-      advisor: "Anil Dash",
-      technician: "Ramesh Naik",
-      urgency: "Medium",
-      estimate: 850,
-      paid: 850,
-      due: 0,
-      serviceType: "Express",
-      date: "29 May 2026",
-      complaints: [
-        { text: "General routine service", finding: "Engine oil dirty, air filter moderately dirty", action: "repair_now" },
-        { text: "Spark plug gap adjustment", finding: "Spark plug electrode carbonized", action: "repair_now" }
-      ],
-      spares: [
-        { name: "Engine Oil Premium 10W30 (800ml)", qty: 1, price: 450, mrp: 480, hsn: "HSN-2710", code: "SP-OIL-12", status: "issued" }
-      ],
-      services: [
-        { name: "Express Washing & Polishing Bundle", rate: 400, hsn: "SAC-9987", code: "SRV-WSH-02", status: "completed" }
-      ],
-      timeline: [
-        { time: "10:00 AM", title: "Job Card Created", desc: "Express service requested" },
-        { time: "10:30 AM", title: "Routine Servicing Done", desc: "Engine oil replaced & air filter cleaned" },
-        { time: "11:15 AM", title: "Washing Completed", desc: "Double foam wash and tire polish done" },
-        { time: "11:45 AM", title: "Ready for Delivery", desc: "Quality inspection passed by Supervisor" }
-      ]
+  // ── Packages ──────────────────────────────────────────────────────────────
+  async getPackages(): Promise<PackageDto[]> {
+    const pkgs = await this.packageRepo.find({ where: { isActive: true } });
+    if (!pkgs.length) return [];
+
+    const pkgIds = pkgs.map(p => p.id);
+    const items = await this.packageItemRepo.findBy({ packageId: In(pkgIds) });
+
+    const spareIds = items.filter(i => i.sparePartId).map(i => i.sparePartId);
+    const serviceIds = items.filter(i => i.serviceId).map(i => i.serviceId);
+
+    const [spareParts, services, batches] = await Promise.all([
+      spareIds.length ? this.sparesRepo.findBy({ id: In(spareIds) }) : [],
+      serviceIds.length ? this.servicesRepo.findBy({ id: In(serviceIds) }) : [],
+      spareIds.length ? this.batchRepo.createQueryBuilder('b').where('b.sparePartId IN (:...ids)', { ids: spareIds }).orderBy('b.createdAt', 'DESC').getMany() : [],
+    ]);
+
+    const spareMap = new Map((spareParts as SparePartEntity[]).map(s => [s.id, s]));
+    const serviceMap = new Map((services as ServiceEntity[]).map(s => [s.id, s]));
+    const latestBatch = new Map<string, InventoryBatchEntity>();
+    for (const b of batches as InventoryBatchEntity[]) {
+      if (!latestBatch.has(b.sparePartId)) latestBatch.set(b.sparePartId, b);
     }
-  ];
 
-  private brandwiseConsumables = [
-    { id: "c1", brand: "BOSCH", name: "Engine Oil 10W30", code: "OIL-10W30" },
-    { id: "c2", brand: "NIKAVI", name: "Chain Clean Spray", code: "LUBE-CH" },
-    { id: "c3", brand: "HP", name: "Coolant Green", code: "CLNT-GRN" },
-  ];
-  private consumableBrandsList = [
-    { id: "cb1", name: "HP" },
-    { id: "cb2", name: "HITECH" },
-    { id: "cb3", name: "MCLARINE" },
-    { id: "cb4", name: "BOSCH" },
-  ];
-  private customerSourcesList = [
-    { id: "cs1", company: "ANTIDOTE", gstin: "21AAMCS8857L1ZO", email: "info@antidote.co.in", contact: "9876543210", person: "A. Pradhan", address: "Raghunathpur", city: "Bhubaneswar", state: "Odisha", sms: "Yes", date: "2026-01-10" },
-    { id: "cs2", company: "RUBRIC PROJECT PRIVATE LIMITED", gstin: "21ABBCS1234F1ZO", email: "contact@rubric.com", contact: "9937122334", person: "S. Sen", address: "Damana", city: "Bhubaneswar", state: "Odisha", sms: "Yes", date: "2026-03-15" },
-  ];
-  private insuranceProvidersList = [
-    { id: "ip1", name: "SBI GENERAL INSURANCE CO. LTD.", gstin: "21AAMCS8857L1ZO", address: "Bhubaneswar", contact: "9999999999", email: "support@sbigeneral.in" },
-    { id: "ip2", name: "HDFC General Insurance", gstin: "GSTIN123456", address: "Bhubaneswar", contact: "0123456789", email: "claims@hdfcergo.com" },
-  ];
-  private sparesMasterList = [
-    { id: "sm1", name: "Brake Shoe Front", code: "Spares" },
-    { id: "sm2", name: "Accelerator Cable", code: "Spares" },
-    { id: "sm3", name: "Engine Oil 1L", code: "Consumables" },
-  ];
-  private vehicleCategoriesList = [
-    { id: "vc1", name: "BIKE" },
-    { id: "vc2", name: "SCOOTY" },
-    { id: "vc3", name: "SCOOTER" },
-  ];
-  private vehicleModelsList = [
-    { id: "vm1", brand: "Suzuki", model: "Access", variant: "SCOOTY" },
-    { id: "vm2", brand: "HERO", model: "KARIZMA", variant: "BIKE" },
-    { id: "vm3", brand: "HARLEY DAVIDSON", model: "X440", variant: "BIKE" },
-  ];
-  private workshopBranches = [
-    { id: "4", name: "Bike Masters", address: "Raghunathpur", location: "RAGHUNATHPUR", pin: "751024", city: "Bhubaneswar", state: "Odisha", person: "Anil Dash", contact: "9876543210", email: "raghunathpur@bikemasters.com", tin: "TIN9988", company: "Bike Masters Pvt Ltd", cin: "CIN8877", serviceTax: "STAX8899" },
-    { id: "3", name: "Bike Masters", address: "Damana", location: "DAMANA", pin: "751016", city: "Bhubaneswar", state: "Odisha", person: "Subhashis Sen", contact: "9937123456", email: "damana@bikemasters.com", tin: "TIN9989", company: "Bike Masters Pvt Ltd", cin: "CIN8878", serviceTax: "STAX8900" },
-  ];
-  private auditLogsList = [
-    { id: "LOG-001", desc: "Vehicle Marked Done for OD-02-AX-1122", type: "Marked Done", category: "Vehicle Service", user: "Manoj Kumar", date: "2026-05-29 09:12:45" },
-    { id: "LOG-002", desc: "Estimation updated for OD-33-Y-9988", type: "Estimation", category: "Vehicle Service", user: "Anil Dash", date: "2026-05-29 09:20:11" },
-  ];
-  private inventoryStockSummary = [
-    { id: "is1", spareName: "Front Brake Shoe Assembly", brand: "Honda", model: "Activa H-Smart", variant: "SCOOTY", partBrand: "BOSCH", partNo: "BP-HON-098", totalQty: 100, consumedQty: 25, availableQty: 75, estimatedQty: 5, location: "Bin A-12" },
-    { id: "is2", spareName: "Engine Oil 10W30 1L", brand: "TVS", model: "Apache", variant: "BIKE", partBrand: "HP", partNo: "OIL-HP-10W30", totalQty: 50, consumedQty: 12, availableQty: 38, estimatedQty: 2, location: "Oil Rack 3" },
-  ];
-  private packagesList = [
-    { id: "pkg1", refId: "PKG-PMS-01", name: "PMS | ENGINE OIL AND COOLANT TOPUP AND WASH POLISH", type: "Other Services", price: 846.61, coverage: "PREMIUM SERVICE PACKAGE", user: "Aditya Pradhan", date: "2026-04-12" },
-    { id: "pkg2", refId: "PKG-GEN-02", name: "PMS | GENERAL CHECKUP & ADJUSTMENT", type: "Regular Service", price: 299.00, coverage: "BASIC CHECKUP PACKAGE", user: "Anil Dash", date: "2026-04-18" },
-  ];
-  private servicesList = [
-    { id: "s1", name: "CARBURETOR CLEAN", category: "scooty", code: "Mechanical Services", amount: 249 },
-    { id: "s2", name: "REAR WHEEL RIM PAINT", category: "scooty", code: "Dent and Paint", amount: 300 },
-    { id: "s3", name: "SILENCER PAINT", category: "bike", code: "Dent and Paint", amount: 249 },
-    { id: "s4", name: "POLISH", category: "bike", code: "Cleaning Services", amount: 149 },
-  ];
-  private deletedRecordsList = [
-    { id: "del1", date: "2026-05-28", vehicle: "TVS Apache 160", name: "Debasis Jena", plateNo: "OD-02-X-4422", mobile: "9853312345", invoice: "INV-2026-009", discount: 150, due: 0, supervisor: "Anil Dash", tech: "Manoj Kumar", kms: 12500, source: "Walk-in" },
-    { id: "del2", date: "2026-05-27", vehicle: "Suzuki Access 125", name: "Mamata Sahu", plateNo: "OD-33-A-1100", mobile: "9438123456", invoice: "INV-2026-007", discount: 0, due: 350, supervisor: "Subhashis Sen", tech: "Ramesh Naik", kms: 8900, source: "Referral" },
-  ];
-  private techProductivityList = [
-    { id: "tp1", jobId: "JOB-9981", vehicle: "OD-02-AX-1122", name: "Manoj Kumar", service: "CARBURETOR CLEAN", status: "Marked Done", start: "09:00 AM", stop: "09:45 AM", duration: "45 mins", speed: "45 mins", cost: 100, profit: 149 },
-    { id: "tp2", jobId: "JOB-9982", vehicle: "OD-33-Y-9988", name: "Ramesh Naik", service: "SILENCER PAINT", status: "Marked Done", start: "10:15 AM", stop: "11:30 AM", duration: "75 mins", speed: "65 mins", cost: 150, profit: 99 },
-  ];
-
-  getHello(): string {
-    return 'Welcome to RAMP WMS (Bike Masters) In-Memory DB API!';
+    return pkgs.map(pkg => {
+      const pkgItems = items.filter(i => i.packageId === pkg.id);
+      const spares: PackageItemDto[] = pkgItems.filter(i => i.itemType === 'spare' && i.sparePartId).map(i => {
+        const sp = spareMap.get(i.sparePartId);
+        const b = latestBatch.get(i.sparePartId);
+        return { type: 'spare', id: i.sparePartId, name: sp?.partName || 'Part', code: sp?.partNumber || '', qty: Number(i.quantity), price: b ? Number(b.sellingPrice) : Number(i.rate), mrp: b ? Number(b.mrp) : Number(i.rate), hsn: sp?.hsnCode || 'N/A' };
+      });
+      const services2: PackageItemDto[] = pkgItems.filter(i => i.itemType === 'service' && i.serviceId).map(i => {
+        const sv = serviceMap.get(i.serviceId);
+        return { type: 'service', id: i.serviceId, name: sv?.serviceName || 'Service', code: sv?.serviceCode || '', qty: 1, price: Number(i.rate), mrp: Number(i.rate), hsn: sv?.hsnSacCode || 'N/A' };
+      });
+      return { id: pkg.id, name: pkg.packageName, description: pkg.description || '', totalPrice: Number(pkg.totalPrice), spares, services: services2 };
+    });
   }
 
-  // Config & Reports getters and actions
-  getBrandwiseConsumables() { return this.brandwiseConsumables; }
-  createBrandwiseConsumable(item: any) { this.brandwiseConsumables.push({ id: `c${this.brandwiseConsumables.length + 1}`, ...item }); return item; }
-  deleteBrandwiseConsumable(id: string) { this.brandwiseConsumables = this.brandwiseConsumables.filter(i => i.id !== id); return { success: true }; }
-
-  getConsumableBrands() { return this.consumableBrandsList; }
-  createConsumableBrand(item: any) { this.consumableBrandsList.push({ id: `cb${this.consumableBrandsList.length + 1}`, ...item }); return item; }
-  deleteConsumableBrand(id: string) { this.consumableBrandsList = this.consumableBrandsList.filter(i => i.id !== id); return { success: true }; }
-
-  getCustomerSourcesList() { return this.customerSourcesList; }
-  createCustomerSourceItem(item: any) { this.customerSourcesList.push({ id: `cs${this.customerSourcesList.length + 1}`, ...item }); return item; }
-  deleteCustomerSourceItem(id: string) { this.customerSourcesList = this.customerSourcesList.filter(i => i.id !== id); return { success: true }; }
-
-  getInsuranceProviders() { return this.insuranceProvidersList; }
-  createInsuranceProvider(item: any) { this.insuranceProvidersList.push({ id: `ip${this.insuranceProvidersList.length + 1}`, ...item }); return item; }
-  deleteInsuranceProvider(id: string) { this.insuranceProvidersList = this.insuranceProvidersList.filter(i => i.id !== id); return { success: true }; }
-
-  getSparesMaster() { return this.sparesMasterList; }
-  createSpareMaster(item: any) { this.sparesMasterList.push({ id: `sm${this.sparesMasterList.length + 1}`, ...item }); return item; }
-  deleteSpareMaster(id: string) { this.sparesMasterList = this.sparesMasterList.filter(i => i.id !== id); return { success: true }; }
-
-  getVehicleCategories() { return this.vehicleCategoriesList; }
-  createVehicleCategory(item: any) { this.vehicleCategoriesList.push({ id: `vc${this.vehicleCategoriesList.length + 1}`, ...item }); return item; }
-  deleteVehicleCategory(id: string) { this.vehicleCategoriesList = this.vehicleCategoriesList.filter(i => i.id !== id); return { success: true }; }
-
-  getVehicleModelsMaster() { return this.vehicleModelsList; }
-  createVehicleModelMaster(item: any) { this.vehicleModelsList.push({ id: `vm${this.vehicleModelsList.length + 1}`, ...item }); return item; }
-  deleteVehicleModelMaster(id: string) { this.vehicleModelsList = this.vehicleModelsList.filter(i => i.id !== id); return { success: true }; }
-
-  getWorkshopBranches() { return this.workshopBranches; }
-  createWorkshopBranch(item: any) { this.workshopBranches.push(item); return item; }
-
-  getAuditLogs() { return this.auditLogsList; }
-  getInventoryStock() { return this.inventoryStockSummary; }
-  getPackages() { return this.packagesList; }
-
-  getServicesList() { return this.servicesList; }
-  createServiceItem(item: any) { this.servicesList.push({ id: `s${this.servicesList.length + 1}`, ...item }); return item; }
-  deleteServiceItem(id: string) { this.servicesList = this.servicesList.filter(i => i.id !== id); return { success: true }; }
-
-  getDeletedRecords() { return this.deletedRecordsList; }
-  restoreDeletedRecord(id: string) { this.deletedRecordsList = this.deletedRecordsList.filter(i => i.id !== id); return { success: true }; }
-  
-  getTechProductivity() { return this.techProductivityList; }
-
-  getEmployees(): Employee[] {
-    return this.employees;
+  // ── Offers ────────────────────────────────────────────────────────────────
+  async getOffers(): Promise<OfferDto[]> {
+    const today = new Date().toISOString().split('T')[0];
+    const rows = await this.offerRepo
+      .createQueryBuilder('o')
+      .where('o.isActive = true AND o.endDate >= :today', { today })
+      .getMany();
+    return rows.map(o => ({ id: o.id, title: o.title, description: o.description || '', offerType: o.offerType, discountValue: Number(o.discountValue), endDate: o.endDate?.toString() || '' }));
   }
 
-  validateLogin(credentials: any) {
-    if (credentials.username === 'admin' && credentials.password === 'password123') {
-      return { success: true, user: { name: 'Aditya Pradhan', role: 'Super Admin' } };
+  // ── Add Spare Part to Master ───────────────────────────────────────────────
+  async addSparePartToMaster(data: any): Promise<SparePartMaster> {
+    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
+    const garageId = garage?.id || '';
+    const part = await this.sparesRepo.save(this.sparesRepo.create({ garageId, partName: data.name, partNumber: data.partNo, hsnCode: data.hsn || 'N/A' }));
+    const batch = await this.batchRepo.save(this.batchRepo.create({
+      sparePartId: part.id, garageId, batchNo: `BATCH-${Date.now()}`,
+      purchasePrice: Number(data.price) * 0.8, mrp: Number(data.mrp), sellingPrice: Number(data.price),
+      quantity: Number(data.stock) || 50, availableQty: Number(data.stock) || 50, purchaseDate: new Date(),
+    }));
+    return { id: part.id, name: part.partName, partNumber: part.partNumber, price: Number(batch.sellingPrice), mrp: Number(batch.mrp), stockQty: batch.availableQty, hsnCode: part.hsnCode || 'N/A' };
+  }
+
+  // ── Add Service to Master ─────────────────────────────────────────────────
+  async addServiceToMaster(data: any): Promise<ServiceMaster> {
+    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
+    const garageId = garage?.id || '';
+    const sv = await this.servicesRepo.save(this.servicesRepo.create({ 
+      garageId, 
+      serviceName: data.name, 
+      serviceCode: data.code, 
+      category: data.category,
+      defaultRate: Number(data.rate || data.amount), 
+      hsnSacCode: data.sac || data.sacCode || '998714' 
+    }));
+    return { id: sv.id, name: sv.serviceName, code: sv.serviceCode, rate: Number(sv.defaultRate), sacCode: sv.hsnSacCode || 'N/A', category: sv.category };
+  }
+
+  async updateServiceInMaster(id: string, data: any): Promise<ServiceMaster> {
+    await this.servicesRepo.update(id, {
+      serviceName: data.name,
+      serviceCode: data.code,
+      category: data.category,
+      defaultRate: Number(data.rate || data.amount),
+      hsnSacCode: data.sac || data.sacCode,
+    });
+    const sv = await this.servicesRepo.findOneBy({ id });
+    if (!sv) throw new Error(`Service ${id} not found`);
+    return { id: sv.id, name: sv.serviceName, code: sv.serviceCode, rate: Number(sv.defaultRate), sacCode: sv.hsnSacCode || 'N/A', category: sv.category };
+  }
+
+  async deleteServiceFromMaster(id: string): Promise<void> {
+    await this.servicesRepo.update(id, { isActive: false });
+  }
+
+  // ── Generate Invoice ──────────────────────────────────────────────────────
+  async generateInvoice(jobCardNo: string, data: any): Promise<InvoiceDto> {
+    const jc = await this.jobCardRepo.findOneBy({ jobCardNo });
+    if (!jc) throw new NotFoundException(`Job card ${jobCardNo} not found`);
+
+    const [customer, vehicle] = await Promise.all([
+      this.customerRepo.findOneBy({ id: jc.customerId }),
+      this.vehicleRepo.findOneBy({ id: jc.vehicleId }),
+    ]);
+
+    let brandModel = 'Bike';
+    if (vehicle) {
+      const model = await this.modelRepo.findOneBy({ id: vehicle.modelId });
+      if (model) {
+        const brand = await this.brandRepo.findOneBy({ id: model.brandId });
+        brandModel = `${brand?.name || ''} ${model.name}`.trim();
+      }
     }
-    return { success: false, message: 'Invalid credentials! Use admin / password123' };
-  }
 
-  // ============================================================
-  // SPEC 4: CUSTOMER & VEHICLE REGISTRATION
-  // ============================================================
+    const count = await this.invoiceRepo.count();
+    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
+    const garageCode = garage?.code?.split('-')[0] || 'BBR';
+    const year = new Date().getFullYear();
+    const invoiceNo = `INV-${garageCode}-${year}-${String(count + 1).padStart(5, '0')}`;
 
-  // Search models emulating typeahead
-  searchVehicles(q: string): VehicleModel[] {
-    const query = q.toLowerCase();
-    return this.models.filter(m => 
-      m.name.toLowerCase().includes(query) ||
-      this.brands.find(b => b.id === m.brandId)?.name.toLowerCase().includes(query)
-    );
-  }
+    const subtotal = Number(data.subtotal) || 0;
+    const discountAmount = Number(data.discountAmount) || 0;
+    const taxAmount = Number(data.taxAmount) || 0;
+    const totalAmount = Number(data.totalAmount) || 0;
+    const customerAmount = Number(data.customerAmount) || totalAmount;
+    const insuranceAmount = Number(data.insuranceAmount) || 0;
 
-  // Get brands
-  getBrands(): VehicleBrand[] {
-    return this.brands;
-  }
+    const existing = await this.invoiceRepo.findOneBy({ jobCardId: jc.id });
+    const invoiceData = { invoiceNo: existing?.invoiceNo || invoiceNo, jobCardId: jc.id, garageId: jc.garageId, customerId: jc.customerId, invoiceType: 'estimate' as const, subtotal, discountAmount, taxAmount, totalAmount, customerAmount, insuranceAmount, status: 'draft' as const };
 
-  // Get models by Brand
-  getModels(brandId?: string): VehicleModel[] {
-    if (brandId) {
-      return this.models.filter(m => m.brandId === brandId);
+    if (existing) {
+      await this.invoiceRepo.update(existing.id, { subtotal, discountAmount, taxAmount, totalAmount, customerAmount, insuranceAmount });
+    } else {
+      await this.invoiceRepo.save(this.invoiceRepo.create(invoiceData));
     }
-    return this.models;
+
+    await this.jobCardRepo.update({ jobCardNo }, { isEstimated: true, overallDiscount: discountAmount });
+
+    return { invoiceNo: invoiceData.invoiceNo, jobCardNo, customerName: customer?.name || 'Customer', vehicleNo: vehicle?.registrationNo || 'N/A', brandModel, subtotal, discountAmount, taxAmount, totalAmount, customerAmount, insuranceAmount };
   }
 
-  // Add brand inline
-  createBrand(name: string): VehicleBrand {
-    const brand: VehicleBrand = { id: `b${this.brands.length + 1}`, name };
-    this.brands.push(brand);
-    return brand;
+  async getInvoices(): Promise<InvoiceReportDto[]> {
+    const invoices = await this.invoiceRepo.find({
+      order: { createdAt: 'DESC' }
+    });
+
+    const reportData: InvoiceReportDto[] = [];
+
+    for (const inv of invoices) {
+      const jc = await this.jobCardRepo.findOneBy({ id: inv.jobCardId });
+      const customer = await this.customerRepo.findOneBy({ id: inv.customerId });
+      
+      let vehicleNo = 'N/A';
+      let brandModel = 'N/A';
+      let arrivalDate = 'N/A';
+      let phone = 'N/A';
+
+      if (jc) {
+        const vehicle = await this.vehicleRepo.findOneBy({ id: jc.vehicleId });
+        if (vehicle) {
+          vehicleNo = vehicle.registrationNo;
+          const model = await this.modelRepo.findOneBy({ id: vehicle.modelId });
+          if (model) {
+            const brand = await this.brandRepo.findOneBy({ id: model.brandId });
+            brandModel = `${brand?.name || ''} ${model.name}`.trim();
+          }
+        }
+        arrivalDate = jc.dateOfArrival?.toISOString().split('T')[0] || 'N/A';
+        phone = customer?.phone || 'N/A';
+      }
+
+      reportData.push({
+        id: inv.id,
+        invoiceNo: inv.invoiceNo,
+        date: inv.createdAt.toISOString().split('T')[0],
+        customerName: customer?.name || 'Unknown',
+        gstin: customer?.gstin || '—',
+        subtotal: Number(inv.subtotal),
+        taxAmount: Number(inv.taxAmount),
+        totalAmount: Number(inv.totalAmount),
+        discountAmount: Number(inv.discountAmount),
+        insuranceAmount: Number(inv.insuranceAmount),
+        customerAmount: Number(inv.customerAmount),
+        paidAmount: jc ? Number(jc.paidAmount) : 0,
+        dueAmount: jc ? Math.max(0, Number(inv.totalAmount) - Number(jc.paidAmount)) : Number(inv.totalAmount),
+        type: inv.invoiceType === 'counter_sale' ? 'Counter Sales' : 'Services',
+        vehicleNo,
+        brandModel,
+        phone,
+        arrivalDate,
+        jobCardNo: jc?.jobCardNo || 'N/A',
+      });
+    }
+
+    return reportData;
   }
 
-  // Add model inline
-  createModel(brandId: string, name: string, category: string, variant: string): VehicleModel {
-    const model: VehicleModel = {
-      id: `m${this.models.length + 1}`,
-      brandId,
-      name,
-      category,
-      variant
-    };
-    this.models.push(model);
-    return model;
+  // ── Brands ────────────────────────────────────────────────────────────────
+  async getBrands(): Promise<VehicleBrand[]> {
+    const rows = await this.brandRepo.find({ where: { isActive: true } });
+    return rows.map(r => ({ id: r.id, name: r.name }));
   }
 
-  // Add customer sources
-  createCustomerSource(name: string) {
-    this.customerSources.push(name);
-    return { name };
+  // ── Models ────────────────────────────────────────────────────────────────
+  async getModels(brandId?: string): Promise<VehicleModel[]> {
+    const where: any = { isActive: true };
+    if (brandId) where.brandId = brandId;
+    const rows = await this.modelRepo.find({ where });
+    return rows.map(r => ({ id: r.id, brandId: r.brandId, name: r.name, category: r.vehicleType, variant: '' }));
   }
 
-  // Add employee (technician/advisor) inline
-  createEmployee(name: string, role: string): Employee {
-    const emp: Employee = { id: `e${this.employees.length + 1}`, name, role };
-    this.employees.push(emp);
-    return emp;
+  // ── Employees ─────────────────────────────────────────────────────────────
+  async getEmployees(role?: string): Promise<Employee[]> {
+    const rows = await this.employeeRepo.find({ where: { isActive: true } });
+    const mapped = rows.map(r => ({ id: r.id, name: r.name, role: EMPLOYEE_TYPE_TO_ROLE[r.type] || r.type }));
+    return role ? mapped.filter(e => e.role === role) : mapped;
   }
 
-  // ============================================================
-  // SPEC 5: SERVICE QUEUE
-  // ============================================================
+  // ── Spare Parts ───────────────────────────────────────────────────────────
+  async getSpareParts(query?: string): Promise<SparePartMaster[]> {
+    const qb = this.sparesRepo.createQueryBuilder('sp').where('sp.isActive = true');
+    if (query) qb.andWhere('(sp.partName LIKE :q OR sp.partNumber LIKE :q)', { q: `%${query}%` });
+    const parts = await qb.getMany();
+    if (!parts.length) return [];
 
-  // Get Job Cards
-  getJobCards(status?: string, search?: string): JobCard[] {
-    let result = [...this.jobs];
+    // Batch fetch latest batch per spare part for price/mrp/stock
+    const partIds = parts.map(p => p.id);
+    const batches = await this.batchRepo
+      .createQueryBuilder('b')
+      .where('b.sparePartId IN (:...ids)', { ids: partIds })
+      .orderBy('b.createdAt', 'DESC')
+      .getMany();
+
+    // Keep only the latest batch per spare part
+    const latestBatch = new Map<string, InventoryBatchEntity>();
+    for (const b of batches) {
+      if (!latestBatch.has(b.sparePartId)) latestBatch.set(b.sparePartId, b);
+    }
+
+    return parts.map(p => {
+      const batch = latestBatch.get(p.id);
+      return {
+        id: p.id,
+        name: p.partName,
+        partNumber: p.partNumber,
+        price: batch ? Number(batch.sellingPrice) : 0,
+        mrp: batch ? Number(batch.mrp) : 0,
+        stockQty: batch ? batch.availableQty : 0,
+        hsnCode: p.hsnCode || 'N/A',
+      };
+    });
+  }
+
+  async getInventoryStockSummary(): Promise<InventoryStockDto[]> {
+    const parts = await this.sparesRepo.find({ where: { isActive: true } });
+    if (!parts.length) return [];
+
+    const partIds = parts.map(p => p.id);
+
+    // Fetch batches and transactions in parallel
+    const [batches, issueTxns, estimatedItems] = await Promise.all([
+      this.batchRepo.createQueryBuilder('b').where('b.sparePartId IN (:...ids)', { ids: partIds }).getMany(),
+      this.txnRepo.createQueryBuilder('t')
+        .select('t.sparePartId', 'sparePartId')
+        .addSelect('SUM(t.quantity)', 'issued')
+        .where('t.sparePartId IN (:...ids)', { ids: partIds })
+        .andWhere("t.transactionType = 'issue'")
+        .groupBy('t.sparePartId')
+        .getRawMany(),
+      this.jobSparesRepo.createQueryBuilder('js')
+        .select('js.partNumber', 'partNumber')
+        .addSelect('SUM(js.quantity)', 'estimatedQty')
+        .where("js.status = 'estimated'")
+        .groupBy('js.partNumber')
+        .getRawMany(),
+    ]);
+
+    // Build lookup maps
+    const issueMap = new Map<string, number>(issueTxns.map(r => [r.sparePartId, Number(r.issued)]));
+    const estimatedMap = new Map<string, number>(estimatedItems.map(r => [r.partNumber, Number(r.estimatedQty)]));
+
+    return parts.map(p => {
+      const partBatches = batches.filter(b => b.sparePartId === p.id);
+      const totalQty = partBatches.reduce((acc, b) => acc + Number(b.quantity), 0);
+      const availableQty = partBatches.reduce((acc, b) => acc + Number(b.availableQty), 0);
+
+      // Use transaction ledger if records exist, else fall back to batch difference
+      const txnConsumed = issueMap.get(p.id);
+      const consumedQty = txnConsumed !== undefined ? txnConsumed : (totalQty - availableQty);
+
+      return {
+        id: p.id,
+        spareName: p.partName,
+        brand: p.compatibleBrand || 'Universal',
+        model: p.compatibleModel || 'All Models',
+        variant: p.compatibleVariant || 'N/A',
+        partBrand: p.partBrand || 'OEM',
+        partNo: p.partNumber,
+        totalQty,
+        consumedQty,
+        availableQty,
+        estimatedQty: estimatedMap.get(p.partNumber) || 0,
+        location: p.binLocation || 'Storage',
+      };
+    });
+  }
+
+  // ── Services Master ───────────────────────────────────────────────────────
+  async getServicesMaster(query?: string): Promise<ServiceMaster[]> {
+    const qb = this.servicesRepo.createQueryBuilder('sv').where('sv.isActive = true');
+    if (query) qb.andWhere('(sv.serviceName LIKE :q OR sv.serviceCode LIKE :q)', { q: `%${query}%` });
+    const rows = await qb.getMany();
+    return rows.map(r => ({ 
+      id: r.id, 
+      name: r.serviceName, 
+      code: r.serviceCode, 
+      rate: Number(r.defaultRate), 
+      sacCode: r.hsnSacCode || 'N/A',
+      category: r.category || 'Mechanical Services'
+    }));
+  }
+
+  // ── Customer Sources ──────────────────────────────────────────────────────
+  async getCustomerSources(): Promise<string[]> {
+    const rows = await this.sourceRepo.find({ where: { isActive: true } });
+    return rows.map(r => r.name);
+  }
+
+  // ── Save Spare Items ──────────────────────────────────────────────────────
+  async saveSpareItems(jobCardId: string, items: any[]) {
+    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
+    const garageId = garage?.id || '';
+
+    // Restore batch qty for any existing issue transactions on this job card
+    const existingTxns = await this.txnRepo.find({
+      where: { referenceType: 'job_card', referenceId: jobCardId, transactionType: 'issue' },
+    });
+    for (const txn of existingTxns) {
+      if (txn.batchId) {
+        await this.batchRepo.increment({ id: txn.batchId }, 'availableQty', txn.quantity);
+      }
+    }
+    if (existingTxns.length) await this.txnRepo.remove(existingTxns);
+
+    // Save job spare items
+    await this.jobSparesRepo.delete({ jobCardId });
+    const entities = items.map(item => this.jobSparesRepo.create({
+      jobCardId, partName: item.name, partNumber: item.code,
+      sparePartId: item.sparePartId || null,
+      price: item.price, mrp: item.mrp || item.price,
+      quantity: item.qty, billedTo: item.billedTo || 'customer', status: item.status || 'estimated',
+    }));
+    const saved = await this.jobSparesRepo.save(entities);
+
+    // Create issue transactions and deduct from batches (best-effort — don't fail the save)
+    let systemUserId: string | null = null;
+    try {
+      const [row] = await this.garageRepo.query('SELECT id FROM users LIMIT 1') as { id: string }[];
+      systemUserId = row?.id || null;
+    } catch { /* users table not accessible */ }
+
+    for (const item of items) {
+      const qty = Number(item.qty) || 1;
+      let sparePartId: string | null = item.sparePartId || null;
+      if (!sparePartId && item.code) {
+        const part = await this.sparesRepo.findOne({ where: { partNumber: item.code, isActive: true } });
+        sparePartId = part?.id || null;
+      }
+      if (!sparePartId) continue;
+
+      try {
+        const batch = await this.batchRepo
+          .createQueryBuilder('b')
+          .where('b.sparePartId = :id AND b.availableQty > 0', { id: sparePartId })
+          .orderBy('b.availableQty', 'DESC')
+          .getOne();
+        if (!batch) continue;
+
+        const deduct = Math.min(qty, batch.availableQty);
+        await this.batchRepo.decrement({ id: batch.id }, 'availableQty', deduct);
+        if (systemUserId) {
+          await this.txnRepo.save(this.txnRepo.create({
+            sparePartId,
+            garageId,
+            batchId: batch.id,
+            transactionType: 'issue',
+            referenceType: 'job_card',
+            referenceId: jobCardId,
+            quantity: deduct,
+            unitPrice: Number(item.price),
+            createdBy: systemUserId,
+          }));
+        }
+      } catch {
+        // inventory deduction is best-effort; don't fail the whole save
+      }
+    }
+
+    return saved;
+  }
+
+  // ── Save Service Items ────────────────────────────────────────────────────
+  async saveServiceItems(jobCardId: string, items: any[]) {
+    await this.jobServicesRepo.delete({ jobCardId });
+    const entities = items.map(item => this.jobServicesRepo.create({
+      jobCardId, serviceName: item.name, serviceCode: item.code,
+      rate: item.rate, billedTo: item.billedTo || 'customer', status: item.status || 'estimated',
+    }));
+    return this.jobServicesRepo.save(entities);
+  }
+
+  // ── Job Cards List (batch-fetches all related data — no N+1) ─────────────
+  async getJobCards(status?: string, search?: string): Promise<JobCard[]> {
+    const qb = this.jobCardRepo.createQueryBuilder('jc')
+      .where('jc.isDeleted = :deleted', { deleted: false })
+      .andWhere('jc.status != :del', { del: 'deleted' });
 
     if (status && status !== 'All Jobs') {
-      result = result.filter(j => j.status === status);
+      const dbStatus = STATUS_TO_DB[status] || status.toLowerCase().replace(/ /g, '_');
+      qb.andWhere('jc.status = :status', { status: dbStatus });
+    }
+    if (search) qb.andWhere('jc.jobCardNo LIKE :search', { search: `%${search}%` });
+
+    const cards = await qb.getMany();
+    if (!cards.length) return [];
+
+    // Batch-fetch everything in 6 parallel queries instead of N×6
+    const vehicleIds = [...new Set(cards.map(c => c.vehicleId).filter(Boolean))];
+    const customerIds = [...new Set(cards.map(c => c.customerId).filter(Boolean))];
+    const advisorIds = [...new Set(cards.map(c => c.serviceAdvisorId).filter(Boolean))];
+    const jobCardNos = cards.map(c => c.jobCardNo);
+
+    const [vehicles, customers, allSpares, allServices, advisors] = await Promise.all([
+      vehicleIds.length ? this.vehicleRepo.findBy({ id: In(vehicleIds) }) : [],
+      customerIds.length ? this.customerRepo.findBy({ id: In(customerIds) }) : [],
+      this.jobSparesRepo.findBy({ jobCardId: In(jobCardNos) }),
+      this.jobServicesRepo.findBy({ jobCardId: In(jobCardNos) }),
+      advisorIds.length ? this.employeeRepo.findBy({ id: In(advisorIds) }) : [],
+    ]);
+
+    const modelIds = [...new Set((vehicles as Vehicle[]).map(v => v.modelId).filter(Boolean))];
+    const [models] = await Promise.all([
+      modelIds.length ? this.modelRepo.findBy({ id: In(modelIds) }) : [],
+    ]);
+    const brandIds = [...new Set((models as VehicleModelEntity[]).map(m => m.brandId).filter(Boolean))];
+    const brands = brandIds.length ? await this.brandRepo.findBy({ id: In(brandIds) }) : [];
+
+    // Build lookup maps
+    const vehicleMap = new Map((vehicles as Vehicle[]).map(v => [v.id, v]));
+    const customerMap = new Map((customers as Customer[]).map(c => [c.id, c]));
+    const modelMap = new Map((models as VehicleModelEntity[]).map(m => [m.id, m]));
+    const brandMap = new Map((brands as VehicleBrandEntity[]).map(b => [b.id, b]));
+    const advisorMap = new Map((advisors as EmployeeEntity[]).map(a => [a.id, a.name]));
+    const sparesMap = new Map<string, JobSpareItemEntity[]>();
+    const servicesMap = new Map<string, JobServiceItemEntity[]>();
+    for (const s of allSpares as JobSpareItemEntity[]) {
+      if (!sparesMap.has(s.jobCardId)) sparesMap.set(s.jobCardId, []);
+      sparesMap.get(s.jobCardId)!.push(s);
+    }
+    for (const s of allServices as JobServiceItemEntity[]) {
+      if (!servicesMap.has(s.jobCardId)) servicesMap.set(s.jobCardId, []);
+      servicesMap.get(s.jobCardId)!.push(s);
     }
 
-    if (search && search.trim().length > 0) {
-      const q = search.toLowerCase();
-      result = result.filter(j => 
-        j.customerName.toLowerCase().includes(q) ||
-        j.phone.includes(q) ||
-        j.vehicleNo.toLowerCase().includes(q) ||
-        j.brandModel.toLowerCase().includes(q)
-      );
-    }
-
-    return result;
-  }
-
-  // Get Status counts stats emulations
-  getJobCardsStats() {
-    return {
-      all: this.jobs.length,
-      underServicing: this.jobs.filter(j => j.status === 'Under Servicing').length,
-      ready: this.jobs.filter(j => j.status === 'Ready for Delivery').length,
-      payment: this.jobs.filter(j => j.status === 'Payment Processing').length,
-      completed: this.jobs.filter(j => j.status === 'Completed').length
-    };
-  }
-
-  // Get specific Job Card
-  getJobCardById(id: string): JobCard {
-    const job = this.jobs.find(j => j.id === id);
-    if (!job) {
-      throw new NotFoundException(`Job card with ID ${id} not found`);
-    }
-    return job;
-  }
-
-  // Create atomic Job Card
-  createJobCard(data: Partial<JobCard>): JobCard {
-    const newId = `JC-BBR-2026-00${this.jobs.length + 127}`;
-    const newJob: JobCard = {
-      id: newId,
-      vehicleNo: (data.vehicleNo || 'OD-05-XX-9999').toUpperCase(),
-      brandModel: data.brandModel || 'Hero Splendor',
-      customerName: data.customerName || 'Anonymous Customer',
-      phone: data.phone || '+91 99999 88888',
-      kms: data.kms || 5000,
-      completion: 10,
-      status: 'Under Servicing',
-      advisor: data.advisor || 'Subhashis Sen',
-      technician: data.technician || 'Manoj Kumar',
-      urgency: data.urgency || 'Medium',
-      estimate: data.estimate || 450,
-      paid: 0,
-      due: data.estimate || 450,
-      serviceType: data.serviceType || 'Regular',
-      date: '29 May 2026',
-      complaints: data.complaints || [
-        { text: 'General routine maintenance check-up', finding: 'First routine service', action: 'repair_now' }
-      ],
-      spares: data.spares || [],
-      services: data.services || [
-        { name: 'General Washing and Detailing', rate: 450, hsn: 'SAC-9987', code: 'SRV-WSH-01', status: 'estimated' }
-      ],
-      timeline: [
-        { time: 'Just Now', title: 'Customer Registered', desc: 'Registered in database' },
-        { time: 'Just Now', title: 'Job Card Opened', desc: `Assigned advisor ${data.advisor || 'Subhashis Sen'}` }
-      ]
-    };
-
-    this.jobs.unshift(newJob);
-    return newJob;
-  }
-
-  // Update Status
-  updateJobCardStatus(id: string, status: string): JobCard {
-    const job = this.getJobCardById(id);
-    job.status = status;
-    if (status === 'Completed') {
-      job.completion = 100;
-      job.due = 0;
-      job.paid = job.estimate;
-    } else if (status === 'Ready for Delivery') {
-      job.completion = 100;
-    }
-    
-    job.timeline.push({
-      time: 'Just Now',
-      title: 'Status Updated',
-      desc: `Moved status step to ${status}`
+    return cards.map(e => {
+      const vehicle = vehicleMap.get(e.vehicleId);
+      const customer = customerMap.get(e.customerId);
+      const model = vehicle ? modelMap.get(vehicle.modelId) : null;
+      const brand = model ? brandMap.get(model.brandId) : null;
+      const brandModel = brand && model ? `${brand.name} ${model.name}`.trim() : 'Bike';
+      const dbSpares = sparesMap.get(e.jobCardNo) || [];
+      const dbServices = servicesMap.get(e.jobCardNo) || [];
+      const advisorName = e.serviceAdvisorId ? (advisorMap.get(e.serviceAdvisorId) || 'Assigned') : 'Assigned';
+      return this.buildJobCardDto(e, vehicle ?? null, customer ?? null, brandModel, dbSpares, dbServices, [], advisorName);
     });
-    
-    return job;
   }
 
-  // Delete Job Card
-  deleteJobCard(id: string): { success: boolean } {
-    const idx = this.jobs.findIndex(j => j.id === id);
-    if (idx === -1) {
-      throw new NotFoundException(`Job card with ID ${id} not found`);
+  // ── Single Job Card ───────────────────────────────────────────────────────
+  async getJobCardById(id: string): Promise<JobCard> {
+    const entity = await this.jobCardRepo.findOneBy({ jobCardNo: id });
+    if (!entity) throw new NotFoundException(`Job card ${id} not found`);
+
+    const [vehicle, customer, dbSpares, dbServices, dbComplaints, advisorEmployee] = await Promise.all([
+      this.vehicleRepo.findOneBy({ id: entity.vehicleId }),
+      this.customerRepo.findOneBy({ id: entity.customerId }),
+      this.jobSparesRepo.findBy({ jobCardId: entity.jobCardNo }),
+      this.jobServicesRepo.findBy({ jobCardId: entity.jobCardNo }),
+      this.complaintRepo.findBy({ jobCardId: entity.id }),
+      entity.serviceAdvisorId ? this.employeeRepo.findOneBy({ id: entity.serviceAdvisorId }) : Promise.resolve(null),
+    ]);
+
+    let brandModel = 'Bike';
+    if (vehicle) {
+      const model = await this.modelRepo.findOneBy({ id: vehicle.modelId });
+      if (model) {
+        const brand = await this.brandRepo.findOneBy({ id: model.brandId });
+        brandModel = `${brand?.name || ''} ${model.name}`.trim();
+      }
     }
-    this.jobs.splice(idx, 1);
-    return { success: true };
+    const advisorName = (advisorEmployee as EmployeeEntity | null)?.name || 'Assigned';
+    return this.buildJobCardDto(entity, vehicle, customer, brandModel, dbSpares, dbServices, dbComplaints, advisorName);
   }
 
-  // ============================================================
-  // SPEC 6: ESTIMATION & JOB BILLING
-  // ============================================================
+  // ── Create Job Card ───────────────────────────────────────────────────────
+  async createJobCard(data: any): Promise<JobCard> {
+    // Resolve garage from DB (use first active garage)
+    const garage = await this.garageRepo.findOne({ where: { isActive: true } });
+    const garageId = garage?.id || '';
+    const organizationId = garage?.organizationId || '';
 
-  // Search Spares Master
-  searchSpares(q: string): SparePartMaster[] {
-    const query = q.toLowerCase();
-    return this.spareParts.filter(p => 
-      p.name.toLowerCase().includes(query) || 
-      p.partNumber.toLowerCase().includes(query)
-    );
+    // 1. Ensure Customer exists
+    let customer = await this.customerRepo.findOneBy({ phone: data.phone });
+    if (!customer) {
+      customer = await this.customerRepo.save(this.customerRepo.create({
+        garageId, name: data.customerName || 'New Customer', phone: data.phone || '0000000000', customerType: 'individual',
+      }));
+    }
+
+    // 2. Resolve Brand and Model
+    const [brandName, ...modelParts] = (data.brandModel || 'Other Other').split(' ');
+    const modelName = modelParts.join(' ') || 'General';
+
+    let brand = await this.brandRepo.findOneBy({ name: brandName });
+    if (!brand) brand = await this.brandRepo.save(this.brandRepo.create({ name: brandName, organizationId }));
+
+    let model = await this.modelRepo.findOneBy({ name: modelName, brandId: brand.id });
+    if (!model) model = await this.modelRepo.save(this.modelRepo.create({ name: modelName, brandId: brand.id, fuelType: 'petrol', vehicleType: 'two_wheeler' }));
+
+    // 3. Ensure Vehicle exists
+    let vehicle = await this.vehicleRepo.findOneBy({ registrationNo: (data.vehicleNo || 'TEMP').toUpperCase() });
+    if (!vehicle) {
+      vehicle = await this.vehicleRepo.save(this.vehicleRepo.create({
+        registrationNo: (data.vehicleNo || 'TEMP').toUpperCase(), organizationId, modelId: model.id, numberPlateColor: 'white',
+      }));
+    }
+
+    // 4. Generate job card number (padded, collision-safe)
+    const count = await this.jobCardRepo.count();
+    const garageCode = garage?.code?.split('-')[0] || 'WMS';
+    const year = new Date().getFullYear();
+    const jobCardNo = `JC-${garageCode}-${year}-${String(count + 1).padStart(5, '0')}`;
+
+    const serviceTypeMap: Record<string, string> = {
+      Regular: 'regular', Express: 'express', Accidental: 'accidental',
+      'Insurance Claim': 'insurance_claim', 'Free Service': 'free_service',
+    };
+
+    const saved = await this.jobCardRepo.save(this.jobCardRepo.create({
+      jobCardNo, garageId, vehicleId: vehicle.id, customerId: customer.id,
+      odometerIn: data.kms || 0, status: 'under_servicing',
+      serviceType: serviceTypeMap[data.serviceType] || 'regular',
+      customerComplaints: JSON.stringify(data.complaints || []),
+      completion: 10, isEstimated: false, isStatusFilled: false, overallDiscount: 0,
+    }));
+
+    return this.getJobCardById(saved.jobCardNo);
   }
 
-  // Search Services Master
-  searchServicesMaster(q: string): ServiceMaster[] {
-    const query = q.toLowerCase();
-    return this.servicesMaster.filter(s => 
-      s.name.toLowerCase().includes(query) || 
-      s.code.toLowerCase().includes(query)
-    );
+  // ── Update Job Card ───────────────────────────────────────────────────────
+  async updateJobCard(id: string, data: Partial<JobCard>): Promise<JobCard> {
+    const entity = await this.jobCardRepo.findOneBy({ jobCardNo: id });
+    if (!entity) throw new NotFoundException(`Job card ${id} not found`);
+
+    if (data.customerName || data.phone) {
+      const customer = await this.customerRepo.findOneBy({ id: entity.customerId });
+      if (customer) {
+        if (data.customerName) customer.name = data.customerName;
+        if (data.phone) customer.phone = data.phone;
+        await this.customerRepo.save(customer);
+      }
+    }
+
+    if (data.vehicleNo) {
+      const vehicle = await this.vehicleRepo.findOneBy({ id: entity.vehicleId });
+      if (vehicle) { vehicle.registrationNo = data.vehicleNo.toUpperCase(); await this.vehicleRepo.save(vehicle); }
+    }
+
+    if (data.kms !== undefined) entity.odometerIn = data.kms;
+    if (data.isEstimated !== undefined) entity.isEstimated = data.isEstimated;
+    if (data.isStatusFilled !== undefined) entity.isStatusFilled = data.isStatusFilled;
+    if (data.overallDiscount !== undefined) entity.overallDiscount = data.overallDiscount;
+    if (data.completion !== undefined) entity.completion = data.completion;
+    if (data.status) {
+      const dbStatus = STATUS_TO_DB[data.status] || data.status;
+      if (dbStatus !== entity.status) {
+        const note = (data as any).statusNote || '';
+        const historyEntry = { time: new Date().toISOString(), status: dbStatus, label: data.status, note };
+        entity.statusHistory = [...(entity.statusHistory || []), historyEntry];
+        if (STATUS_COMPLETION[dbStatus] !== undefined && data.completion === undefined) {
+          entity.completion = STATUS_COMPLETION[dbStatus];
+        }
+      }
+      entity.status = dbStatus;
+    }
+    if ((data as any).paid !== undefined) entity.paidAmount = (data as any).paid;
+    if ((data as any).paymentBreakdown !== undefined) entity.paymentBreakdown = (data as any).paymentBreakdown;
+    if ((data as any).actualDeliveryDate !== undefined) entity.actualDeliveryDate = new Date((data as any).actualDeliveryDate);
+
+    if (data.advisor) {
+      const emp = await this.employeeRepo.findOneBy({ name: data.advisor, isActive: true });
+      if (emp) entity.serviceAdvisorId = emp.id;
+    }
+
+    if (data.complaints) entity.customerComplaints = JSON.stringify(data.complaints);
+
+    const saved = await this.jobCardRepo.save(entity);
+    return this.getJobCardById(saved.jobCardNo);
   }
 
-  // Save / Update Spares allocated to Job Card (Bulk Upsert)
-  updateJobSpares(id: string, items: SpareItem[]): JobCard {
-    const job = this.getJobCardById(id);
-    job.spares = items;
-    this.recalculateEstimateTotals(job);
-    return job;
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  async getStats() {
+    const [total, underServicing, ready, payment, completed] = await Promise.all([
+      this.jobCardRepo.countBy({ isDeleted: false }),
+      this.jobCardRepo.countBy({ isDeleted: false, status: 'under_servicing' }),
+      this.jobCardRepo.countBy({ isDeleted: false, status: 'ready_for_delivery' }),
+      this.jobCardRepo.countBy({ isDeleted: false, status: 'payment_processing' }),
+      this.jobCardRepo.countBy({ isDeleted: false, status: 'completed' }),
+    ]);
+
+    // Sum revenue from actual completed job spare + service items
+    const revenueRow = await this.jobCardRepo
+      .createQueryBuilder('jc')
+      .select('SUM(jc.overallDiscount)', 'discount')  // placeholder until payment table is added
+      .where('jc.status = :s AND jc.isDeleted = false', { s: 'completed' })
+      .getRawOne();
+
+    return { total, underServicing, ready, payment, completed, revenue: Number(revenueRow?.discount) || 0 };
   }
 
-  // Save / Update Services allocated to Job Card (Bulk Upsert)
-  updateJobServices(id: string, items: ServiceItem[]): JobCard {
-    const job = this.getJobCardById(id);
-    job.services = items;
-    this.recalculateEstimateTotals(job);
-    return job;
-  }
+  // ── Private: Build DTO from entities ─────────────────────────────────────
+  private buildJobCardDto(
+    entity: JobCardEntity,
+    vehicle: Vehicle | null,
+    customer: Customer | null,
+    brandModel: string,
+    dbSpares: JobSpareItemEntity[],
+    dbServices: JobServiceItemEntity[],
+    dbComplaints: JobComplaintEntity[] = [],
+    advisorName = 'Assigned',
+  ): JobCard {
+    const spareTotal = dbSpares.reduce((sum, s) => sum + Number(s.price) * s.quantity, 0);
+    const serviceTotal = dbServices.reduce((sum, s) => sum + Number(s.rate), 0);
+    const estimate = spareTotal + serviceTotal;
+    const discount = Number(entity.overallDiscount) || 0;
+    const paid = Number(entity.paidAmount) || 0;
+    const due = Math.max(0, estimate - discount - paid);
 
-  // Calculate totals and updates job estimates
-  private recalculateEstimateTotals(job: JobCard) {
-    const spareTotal = job.spares.reduce((sum, item) => sum + (item.price * item.qty), 0);
-    const serviceTotal = job.services.reduce((sum, item) => sum + item.rate, 0);
-    
-    job.estimate = spareTotal + serviceTotal;
-    job.due = job.estimate - job.paid;
-  }
-
-  // Retrieve computed totals split
-  getJobEstimateTotals(id: string) {
-    const job = this.getJobCardById(id);
-    const spareSubtotal = job.spares.reduce((sum, item) => sum + (item.price * item.qty), 0);
-    const serviceSubtotal = job.services.reduce((sum, item) => sum + item.rate, 0);
-    
-    const subtotal = spareSubtotal + serviceSubtotal;
-    const gstAmount = Math.round(subtotal * 0.18); // default emulated 18% GST
-    const netTotal = subtotal + gstAmount;
+    const createdAt = entity.createdAt ? new Date(entity.createdAt).toISOString() : new Date().toISOString();
+    const updatedAt = entity.updatedAt ? new Date(entity.updatedAt).toISOString() : createdAt;
+    const timeline: TimelineEntry[] = [
+      { time: createdAt, title: 'Job Card Created', desc: `Vehicle checked in — ${vehicle?.registrationNo || 'N/A'}` },
+    ];
+    if (entity.isEstimated) {
+      timeline.push({ time: updatedAt, title: 'Estimation Calculated', desc: `Estimate: ₹${estimate.toFixed(2)}` });
+    }
+    if (discount > 0) {
+      timeline.push({ time: updatedAt, title: 'Discount Applied', desc: `Discount: ₹${discount.toFixed(2)}` });
+    }
+    if (Array.isArray(entity.statusHistory)) {
+      for (const h of entity.statusHistory) {
+        timeline.push({ time: h.time, title: `Status: ${h.label}`, desc: h.note || `Updated to ${h.label}` });
+      }
+    }
 
     return {
-      subtotal,
-      discount: 0,
-      tax: gstAmount,
-      total: netTotal,
-      customerDues: netTotal - job.paid,
-      paid: job.paid
+      id: entity.jobCardNo,
+      vehicleNo: vehicle?.registrationNo || 'UNKNOWN',
+      brandModel,
+      customerName: customer?.name || 'Anonymous',
+      phone: customer?.phone || 'N/A',
+      kms: entity.odometerIn,
+      completion: entity.completion ?? (entity.status === 'completed' ? 100 : 10),
+      status: STATUS_TO_UI[entity.status] || entity.status,
+      advisor: advisorName,
+      technician: 'Assigned',
+      urgency: 'Medium',
+      estimate,
+      paid,
+      due,
+      serviceType: entity.serviceType,
+      date: entity.dateOfArrival ? new Date(entity.dateOfArrival).toDateString() : new Date().toDateString(),
+      complaints: dbComplaints.map(c => ({ text: c.complaintText, finding: c.workshopFinding || '', action: this.dbActionToFrontend(c.action) })),
+      spares: dbSpares.map(s => ({
+        id: s.id, name: s.partName, qty: s.quantity,
+        price: Number(s.price), mrp: Number(s.mrp),
+        hsn: s.partNumber, code: s.partNumber,
+        status: s.status, billedTo: s.billedTo as any,
+      })),
+      services: dbServices.map(s => ({
+        id: s.id, name: s.serviceName, rate: Number(s.rate),
+        hsn: s.serviceCode, code: s.serviceCode,
+        status: s.status, billedTo: s.billedTo as any,
+      })),
+      timeline,
+      isEstimated: entity.isEstimated,
+      isStatusFilled: entity.isStatusFilled,
+      overallDiscount: discount,
+      rating: entity.rating ?? null,
+      paymentBreakdown: entity.paymentBreakdown ?? null,
     };
   }
 
-  // Generate In-Memory Invoice PDF Layout Stream Mock
-  generateInvoicePdf(id: string) {
-    const job = this.getJobCardById(id);
-    const totals = this.getJobEstimateTotals(id);
+  async updateRating(jobCardNo: string, rating: number): Promise<void> {
+    const entity = await this.jobCardRepo.findOneBy({ jobCardNo });
+    if (!entity) throw new Error(`Job card ${jobCardNo} not found`);
+    await this.jobCardRepo.update(entity.id, { rating });
+  }
 
-    return {
-      invoiceNo: `INV-BBR-2026-00${Math.floor(Math.random() * 900) + 100}`,
-      jobCardNo: job.id,
-      customerName: job.customerName,
-      vehicleNo: job.vehicleNo,
-      brandModel: job.brandModel,
-      subtotal: totals.subtotal,
-      tax: totals.tax,
-      total: totals.total,
-      pdfUrl: `https://bikemasters.storage.azure.in/invoices/inv-bbr-${job.id.toLowerCase()}.pdf`
-    };
+  // ── Estimation Context (single load endpoint) ─────────────────────────────
+  async getEstimationContext(jobCardNo: string) {
+    const [jobCard, complaints, packages, offers, employees, spareCatalog, serviceCatalog] = await Promise.all([
+      this.getJobCardById(jobCardNo),
+      this.getComplaints(jobCardNo),
+      this.getPackages(),
+      this.getOffers(),
+      this.getEmployees(),
+      this.getSpareParts(''),
+      this.getServicesMaster(''),
+    ]);
+    return { jobCard, complaints, packages, offers, employees, spareCatalog, serviceCatalog };
+  }
+
+  // ── Vehicle History ───────────────────────────────────────────────────────
+  async getVehicleHistory(vehicleNo: string): Promise<VehicleHistoryRow[]> {
+    const vehicle = await this.vehicleRepo.findOne({ where: { registrationNo: vehicleNo.toUpperCase() } });
+    if (!vehicle) return [];
+
+    const jobCards = await this.jobCardRepo.find({
+      where: { vehicleId: vehicle.id, isDeleted: false },
+      order: { dateOfArrival: 'DESC' },
+    });
+    if (!jobCards.length) return [];
+
+    const jobCardIds = jobCards.map(jc => jc.id);
+    const jobCardNos = jobCards.map(jc => jc.jobCardNo);
+
+    const [invoices, allSpares, allServices, advisors] = await Promise.all([
+      this.invoiceRepo.find({ where: { jobCardId: In(jobCardIds) } }),
+      this.jobSparesRepo.find({ where: { jobCardId: In(jobCardNos) } }),
+      this.jobServicesRepo.find({ where: { jobCardId: In(jobCardNos) } }),
+      this.employeeRepo.find(),
+    ]);
+
+    const invoiceMap = new Map(invoices.map(inv => [inv.jobCardId, inv]));
+    const sparesMap = new Map<string, JobSpareItemEntity[]>();
+    const servicesMap = new Map<string, JobServiceItemEntity[]>();
+    for (const s of allSpares) {
+      if (!sparesMap.has(s.jobCardId)) sparesMap.set(s.jobCardId, []);
+      sparesMap.get(s.jobCardId)!.push(s);
+    }
+    for (const s of allServices) {
+      if (!servicesMap.has(s.jobCardId)) servicesMap.set(s.jobCardId, []);
+      servicesMap.get(s.jobCardId)!.push(s);
+    }
+    const advisorMap = new Map(advisors.map(e => [e.id, e]));
+
+    return jobCards.map(jc => {
+      const invoice = invoiceMap.get(jc.id);
+      const spareItems = sparesMap.get(jc.jobCardNo) || [];
+      const serviceItems = servicesMap.get(jc.jobCardNo) || [];
+
+      const sparesTotal = spareItems.reduce((sum, s) => sum + Number(s.price) * s.quantity, 0);
+      const laboursTotal = serviceItems.reduce((sum, s) => sum + Number(s.rate), 0);
+      const GST = 0.18;
+      const taxOnParts = Math.round(sparesTotal * GST * 100) / 100;
+      const taxOnServices = Math.round(laboursTotal * GST * 100) / 100;
+      const totalAmount = invoice ? Number(invoice.totalAmount) : (sparesTotal + laboursTotal + taxOnParts + taxOnServices);
+      const discount = invoice ? Number(invoice.discountAmount) : Number(jc.overallDiscount) || 0;
+      const totalPaid = Number(jc.paidAmount) || 0;
+      const dueAmount = Math.max(0, totalAmount - totalPaid);
+
+      const advisor = jc.serviceAdvisorId ? advisorMap.get(jc.serviceAdvisorId) : null;
+      const techName = advisor?.name?.toUpperCase() || 'N/A';
+
+      return {
+        invoiceNo: invoice?.invoiceNo || jc.jobCardNo,
+        arrivalDate: jc.dateOfArrival ? new Date(jc.dateOfArrival).toISOString().split('T')[0] : 'N/A',
+        kmsDriven: jc.odometerIn || 0,
+        taxOnServices,
+        taxOnParts,
+        spares: sparesTotal,
+        labours: laboursTotal,
+        discount,
+        totalAmount,
+        totalPaid,
+        dueAmount,
+        techName,
+        techFeedback: jc.ratingFeedback || '',
+        customerFeedback: jc.rating ? `${jc.rating}/5` : '',
+        jobCardNo: jc.jobCardNo,
+      };
+    });
+  }
+
+  // ── Save Estimation (single save endpoint) ────────────────────────────────
+  async saveEstimation(jobCardNo: string, body: {
+    spares: any[];
+    services: any[];
+    complaints: ComplaintDto[];
+    isEstimated: boolean;
+    completion: number;
+    overallDiscount: number;
+  }) {
+    const [spares, services] = await Promise.all([
+      this.saveSpareItems(jobCardNo, body.spares),
+      this.saveServiceItems(jobCardNo, body.services),
+      this.saveComplaints(jobCardNo, body.complaints),
+    ]);
+
+    const entity = await this.jobCardRepo.findOneBy({ jobCardNo });
+    if (entity) {
+      await this.jobCardRepo.update(entity.id, {
+        isEstimated: body.isEstimated,
+        completion: body.completion,
+        overallDiscount: body.overallDiscount,
+      });
+    }
+
+    return this.getJobCardById(jobCardNo);
+  }
+
+  private parseJSON<T>(value: string | null | undefined, fallback: T): T {
+    try { return value ? JSON.parse(value) : fallback; } catch { return fallback; }
   }
 }

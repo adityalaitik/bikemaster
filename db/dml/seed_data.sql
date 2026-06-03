@@ -1,22 +1,24 @@
 -- ============================================================
--- RAMP WMS - PostgreSQL Complete DML Seed Script
--- Compatibility: PostgreSQL 12+
+-- RAMP WMS - MySQL Complete DML Seed Script
+-- Compatibility: MySQL 8.0+
 -- Description: Inserts realistic seed data for testing
 -- ============================================================
 
+SET foreign_key_checks = 0;
+
 -- TIER 1: ORGANIZATIONS
-INSERT INTO organizations (id, name, slug, plan, is_active)
+INSERT IGNORE INTO organizations (id, name, slug, plan, is_active)
 VALUES (
-    '8843e4fb-63d2-4376-976b-ab9b61c65eec', 
-    'Bike Masters Group', 
-    'bike-masters', 
-    'enterprise', 
+    '8843e4fb-63d2-4376-976b-ab9b61c65eec',
+    'Bike Masters Group',
+    'bike-masters',
+    'enterprise',
     TRUE
-) ON CONFLICT DO NOTHING;
+);
 
 -- TIER 1: GARAGES
-INSERT INTO garages (id, organization_id, name, code, city, state, pincode, phone, email, gstin, is_active)
-VALUES 
+INSERT IGNORE INTO garages (id, organization_id, name, code, city, state, pincode, phone, email, gstin, is_active)
+VALUES
 (
     '11111111-1111-1111-1111-111111111111',
     '8843e4fb-63d2-4376-976b-ab9b61c65eec',
@@ -42,11 +44,11 @@ VALUES
     'ctc@bikemasters.in',
     '21BBBBB0000A1Z1',
     TRUE
-) ON CONFLICT DO NOTHING;
+);
 
 -- TIER 2: USERS (Passwords hashed using bcrypt 'password123')
-INSERT INTO users (id, organization_id, email, phone, password_hash, first_name, last_name, role, is_active)
-VALUES 
+INSERT IGNORE INTO users (id, organization_id, email, phone, password_hash, first_name, last_name, role, is_active)
+VALUES
 (
     '33333333-3333-3333-3333-333333333333',
     '8843e4fb-63d2-4376-976b-ab9b61c65eec',
@@ -68,25 +70,23 @@ VALUES
     'Sen',
     'garage_manager',
     TRUE
-) ON CONFLICT DO NOTHING;
+);
 
 -- TIER 2: GARAGE ASSIGNMENTS
-INSERT INTO user_garage_assignments (user_id, garage_id, is_primary)
-VALUES 
+INSERT IGNORE INTO user_garage_assignments (user_id, garage_id, is_primary)
+VALUES
 ('33333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111', TRUE),
-('44444444-4444-4444-4444-444444444444', '11111111-1111-1111-1111-111111111111', TRUE)
-ON CONFLICT DO NOTHING;
+('44444444-4444-4444-4444-444444444444', '11111111-1111-1111-1111-111111111111', TRUE);
 
 -- TIER 2: DESIGNATIONS
-INSERT INTO designations (id, garage_id, name)
-VALUES 
+INSERT IGNORE INTO designations (id, garage_id, name)
+VALUES
 ('55555555-5555-5555-5555-555555555555', '11111111-1111-1111-1111-111111111111', 'Senior Technician'),
-('66666666-6666-6666-6666-666666666666', '11111111-1111-1111-1111-111111111111', 'Service Advisor')
-ON CONFLICT DO NOTHING;
+('66666666-6666-6666-6666-666666666666', '11111111-1111-1111-1111-111111111111', 'Service Advisor');
 
 -- TIER 2: EMPLOYEES
-INSERT INTO employees (id, user_id, garage_id, designation_id, employee_code, name, phone, type, is_active)
-VALUES 
+INSERT IGNORE INTO employees (id, user_id, garage_id, designation_id, employee_code, name, phone, type, is_active)
+VALUES
 (
     '77777777-7777-7777-7777-777777777777',
     '44444444-4444-4444-4444-444444444444',
@@ -108,20 +108,18 @@ VALUES
     '+91 88888 77777',
     'technician',
     TRUE
-) ON CONFLICT DO NOTHING;
+);
 
 -- TIER 3: BRANDS & MODELS
-INSERT INTO vehicle_brands (id, organization_id, name, is_active)
-VALUES ('99999999-9999-9999-9999-999999999999', '8843e4fb-63d2-4376-976b-ab9b61c65eec', 'Honda', TRUE)
-ON CONFLICT DO NOTHING;
+INSERT IGNORE INTO vehicle_brands (id, organization_id, name, is_active)
+VALUES ('99999999-9999-9999-9999-999999999999', '8843e4fb-63d2-4376-976b-ab9b61c65eec', 'Honda', TRUE);
 
-INSERT INTO vehicle_models (id, brand_id, name, fuel_type, vehicle_type, is_active)
-VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '99999999-9999-9999-9999-999999999999', 'Activa 6G', 'petrol', 'two_wheeler', TRUE)
-ON CONFLICT DO NOTHING;
+INSERT IGNORE INTO vehicle_models (id, brand_id, name, fuel_type, vehicle_type, is_active)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '99999999-9999-9999-9999-999999999999', 'Activa 6G', 'petrol', 'two_wheeler', TRUE);
 
 -- TIER 12: TAXES
-INSERT INTO tax_rates (id, organization_id, name, cgst_rate, sgst_rate, igst_rate, is_active)
-VALUES 
+INSERT IGNORE INTO tax_rates (id, organization_id, name, cgst_rate, sgst_rate, igst_rate, is_active)
+VALUES
 (
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
     '8843e4fb-63d2-4376-976b-ab9b61c65eec',
@@ -130,11 +128,11 @@ VALUES
     9.00,
     18.00,
     TRUE
-) ON CONFLICT DO NOTHING;
+);
 
 -- TIER 6: SPARES MASTER
-INSERT INTO spare_parts (id, garage_id, part_name, part_number, unit, reorder_level, is_active)
-VALUES 
+INSERT IGNORE INTO spare_parts (id, garage_id, part_name, part_number, unit, reorder_level, is_active)
+VALUES
 (
     'cccccccc-cccc-cccc-cccc-cccccccccccc',
     '11111111-1111-1111-1111-111111111111',
@@ -143,11 +141,11 @@ VALUES
     'PCS',
     10,
     TRUE
-) ON CONFLICT DO NOTHING;
+);
 
 -- TIER 7: SERVICES MASTER
-INSERT INTO services (id, garage_id, service_name, service_code, default_rate, is_active)
-VALUES 
+INSERT IGNORE INTO services (id, garage_id, service_name, service_code, default_rate, is_active)
+VALUES
 (
     'dddddddd-dddd-dddd-dddd-dddddddddddd',
     '11111111-1111-1111-1111-111111111111',
@@ -155,4 +153,6 @@ VALUES
     'SRV-WSH-01',
     450.00,
     TRUE
-) ON CONFLICT DO NOTHING;
+);
+
+SET foreign_key_checks = 1;

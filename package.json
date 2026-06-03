@@ -12,7 +12,11 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "clean": "turbo run clean",
-    "start": "npm run start:prod --workspace=apps/api"
+    "start": "npm run start:prod --workspace=apps/api",
+    "db:setup": "bash db/scripts/setup.sh",
+    "db:dump": "bash db/scripts/dump.sh",
+    "db:apply": "bash db/scripts/apply.sh",
+    "db:reset": "bash db/scripts/reset.sh"
   },
   "devDependencies": {
     "turbo": "^2.0.4"

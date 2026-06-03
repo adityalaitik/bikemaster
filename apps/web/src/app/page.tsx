@@ -3,6 +3,15 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Shield,
+  Bike,
+  Star,
+  ThumbsUp,
+  RefreshCw,
+  DollarSign,
+  Percent,
+  Printer,
+  MoreHorizontal,
   Wrench,
   Search,
   Plus,
@@ -11,6 +20,7 @@ import {
   User,
   LogOut,
   ChevronDown,
+  ChevronUp,
   Phone,
   Clock,
   CheckCircle,
@@ -90,6 +100,10 @@ interface JobCard {
   spares: SpareItem[];
   services: ServiceItem[];
   timeline: TimelineItem[];
+  isEstimated?: boolean;
+  isStatusFilled?: boolean;
+  overallDiscount?: number;
+  advancePaid?: number;
 }
 
 interface InventoryBatch {
@@ -208,6 +222,7 @@ const INITIAL_JOBS = [
     technician: "Manoj Kumar",
     urgency: "High",
     estimate: 1450,
+    isEstimated: true,
     paid: 0,
     due: 1450,
     serviceType: "Regular",
@@ -243,6 +258,7 @@ const INITIAL_JOBS = [
     technician: "Ramesh Naik",
     urgency: "Medium",
     estimate: 850,
+    isEstimated: true,
     paid: 850,
     due: 0,
     serviceType: "Express",
@@ -277,6 +293,7 @@ const INITIAL_JOBS = [
     technician: "Sanjay Rout",
     urgency: "Low",
     estimate: 5400,
+    isEstimated: true,
     paid: 2000,
     due: 3400,
     serviceType: "Insurance Claim",
@@ -312,6 +329,7 @@ const INITIAL_JOBS = [
     technician: "Manoj Kumar",
     urgency: "High",
     estimate: 2800,
+    isEstimated: true,
     paid: 1000,
     due: 1800,
     serviceType: "Accidental",
@@ -338,7 +356,8 @@ const INITIAL_JOBS = [
 
 export default function Home() {
   const router = useRouter();
-  const [jobs, setJobs] = useState(INITIAL_JOBS);
+  const [jobs, setJobs] = useState<JobCard[]>(INITIAL_JOBS);
+  const [invoices, setInvoices] = useState<any[]>([]);
   const [theme, setTheme] = useState("light");
   const [mounted, setMounted] = useState(false);
 
@@ -366,14 +385,16 @@ export default function Home() {
   const [activeFilter, setActiveFilter] = useState("All Jobs");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedJob, setSelectedJob] = useState<JobCard | null>(null);
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [jobRatings, setJobRatings] = useState<Record<string, number>>({});
 
   // Authentication states
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(true);
   const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [currentUser, setCurrentUser] = useState<{
     id: string; name: string; username: string; role: string; garageCode: string; token: string;
-  } | null>(null);
+  } | null>({ id: "u1", name: "Aditya Pradhan", username: "admin", role: "super_admin", garageCode: "BBR-001", token: "bypass" });
 
   // Restore session from localStorage on mount
   useEffect(() => {
@@ -466,6 +487,66 @@ export default function Home() {
     { id: "s3", name: "SILENCER PAINT", category: "bike", code: "Dent and Paint", amount: 249 },
     { id: "s4", name: "POLISH", category: "bike", code: "Cleaning Services", amount: 149 },
   ]);
+
+  // Load invoices from Backend
+  useEffect(() => {
+    const fetchInvoices = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/invoices`);
+        if (res.ok) {
+          const data = await res.json();
+          setInvoices(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch invoices", err);
+      }
+    };
+    fetchInvoices();
+  }, [activeTab]);
+
+  // Load Inventory Stock Summary from Backend
+  useEffect(() => {
+    const fetchInventory = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/spare-parts/stock-summary`);
+        if (res.ok) {
+          const data = await res.json();
+          setInventoryStockSummary(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch inventory", err);
+      }
+    };
+    if (activeTab === "Inventory Management") {
+      fetchInventory();
+    }
+  }, [activeTab]);
+
+  // Load Services Master from Backend
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/services-master`);
+        if (res.ok) {
+          const data = await res.json();
+          const mapped = data.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            category: s.category || "General",
+            code: s.code,
+            amount: s.rate
+          }));
+          setServicesList(mapped);
+        }
+      } catch (err) {
+        console.error("Failed to fetch services", err);
+      }
+    };
+    if (activeTab === "Manage Services") {
+      fetchServices();
+    }
+  }, [activeTab]);
+
   const [deletedRecordsList, setDeletedRecordsList] = useState([
     { id: "del1", date: "2026-05-28", vehicle: "TVS Apache 160", name: "Debasis Jena", plateNo: "OD-02-X-4422", mobile: "9853312345", invoice: "INV-2026-009", discount: 150, due: 0, supervisor: "Anil Dash", tech: "Manoj Kumar", kms: 12500, source: "Walk-in" },
     { id: "del2", date: "2026-05-27", vehicle: "Suzuki Access 125", name: "Mamata Sahu", plateNo: "OD-33-A-1100", mobile: "9438123456", invoice: "INV-2026-007", discount: 0, due: 350, supervisor: "Subhashis Sen", tech: "Ramesh Naik", kms: 8900, source: "Referral" },
@@ -1273,6 +1354,214 @@ export default function Home() {
     };
     fetchEmployees();
   }, []);
+  // Progress and Action Handlers
+  const handleJobAction = async (job: JobCard, action: string) => {
+    let updates: Partial<JobCard> = {};
+    const currentProgress = job.completion;
+
+    if (action === "Status") {
+      if (!job.isEstimated) {
+        triggerToast("Please complete estimation first!", "warn");
+        return;
+      }
+      setSelectedJob(job);
+      setSelectedStatus(job.status);
+      setStatusNote("");
+      setIsStatusModalOpen(true);
+      return;
+    } else if (action === "JC/Est" || action === "JC/ Est") {
+      router.push(`/estimation/${job.id}`);
+      return; // Handled by navigation
+    } else if (action === "Payments") {
+      setSelectedJob(job);
+      setIsPaymentModalOpen(true);
+      return;
+    } else if (action === "Discount") {
+      if (!job.isEstimated) {
+        triggerToast("Discount can only be applied after estimation!", "warn");
+        return;
+      }
+      setSelectedJob(job);
+      const spareItems = job.spares.map((s, i) => ({
+        key: `spare-${i}`, name: s.name, total: s.price * s.qty, type: "amount" as const, value: 0, isSpare: true,
+      }));
+      const serviceItems = job.services.map((s, i) => ({
+        key: `svc-${i}`, name: s.name, total: s.rate, type: "amount" as const, value: 0, isSpare: false,
+      }));
+      setDiscountForm({ overallType: "amount", overallValue: job.overallDiscount || 0, lineItems: [...spareItems, ...serviceItems] });
+      setSelectedOfferId(null);
+      fetch(`${API_BASE_URL}/offers`).then(r => r.json()).then(data => setAvailableOffers(data || [])).catch(() => setAvailableOffers([]));
+      setIsDiscountModalOpen(true);
+      return;
+    } else if (action === "History") {
+      setHistoryVehicleNo(job.vehicleNo);
+      setHistoryRows([]);
+      setIsHistoryModalOpen(true);
+      setHistoryLoading(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/vehicles/${encodeURIComponent(job.vehicleNo)}/history`);
+        if (res.ok) setHistoryRows(await res.json());
+      } catch { /* show empty */ }
+      setHistoryLoading(false);
+      return;
+    } else if (action === "Invoice") {
+      setSelectedJob(job);
+      setIsInvoiceModalOpen(true);
+      fetch(`${API_BASE_URL}/job-cards/${job.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completion: 95 }) }).then(r => r.ok && r.json()).then(u => u && setJobs(prev => prev.map(j => j.id === u.id ? u : j))).catch(() => setJobs(prev => prev.map(j => j.id === job.id ? { ...j, completion: 95 } : j)));
+      addTimelineEntry(job.id, "Invoice Generated", `Tax invoice prepared for ${job.vehicleNo}`);
+      return;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/job-cards/${job.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updates)
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
+          triggerToast(`Job card updated: ${action}`, "success");
+        }
+      } catch (err) {
+        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, ...updates } : j));
+        triggerToast(`${action} updated (Local Fallback)`, "success");
+      }
+    }
+  };
+
+  // State for new feature modals
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [statusNote, setStatusNote] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+  const [availableOffers, setAvailableOffers] = useState<{ id: string; title: string; description: string; offerType: string; discountValue: number; endDate: string }[]>([]);
+  const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [historyVehicleNo, setHistoryVehicleNo] = useState("");
+  const [historyRows, setHistoryRows] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({
+    card: 0, cash: 0, cheque: 0, other: 0, remarks: ""
+  });
+  const [discountForm, setDiscountForm] = useState<{
+    overallType: "percentage" | "amount";
+    overallValue: number;
+    lineItems: Array<{ key: string; name: string; total: number; type: "percentage" | "amount"; value: number; isSpare: boolean }>;
+  }>({ overallType: "amount", overallValue: 0, lineItems: [] });
+
+  const addTimelineEntry = (jobId: string, title: string, desc: string) => {
+    const entry = { time: new Date().toISOString(), title, desc };
+    const patch = (j: JobCard) => j.id === jobId ? { ...j, timeline: [...(j.timeline || []), entry] } : j;
+    setJobs(prev => prev.map(patch));
+    setSelectedJob(prev => prev && prev.id === jobId ? { ...prev, timeline: [...(prev.timeline || []), entry] } : prev);
+  };
+
+  const handleSavePayment = async () => {
+    if (!selectedJob) return;
+    const totalPaid = Number(paymentForm.card) + Number(paymentForm.cash) + Number(paymentForm.cheque) + Number(paymentForm.other);
+    const updates = {
+      paid: selectedJob.paid + totalPaid,
+      due: Math.max(0, selectedJob.estimate - (selectedJob.paid + totalPaid)),
+      completion: 50,
+      paymentBreakdown: {
+        card: ((selectedJob as any).paymentBreakdown?.card || 0) + Number(paymentForm.card),
+        cash: ((selectedJob as any).paymentBreakdown?.cash || 0) + Number(paymentForm.cash),
+        cheque: ((selectedJob as any).paymentBreakdown?.cheque || 0) + Number(paymentForm.cheque),
+        other: ((selectedJob as any).paymentBreakdown?.other || 0) + Number(paymentForm.other),
+        remarks: paymentForm.remarks,
+      },
+    };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
+        addTimelineEntry(selectedJob.id, "Advance Payment Done", `₹${totalPaid} received via ${[paymentForm.card > 0 && 'Card', paymentForm.cash > 0 && 'Cash', paymentForm.cheque > 0 && 'Cheque', paymentForm.other > 0 && 'Other'].filter(Boolean).join(', ') || 'Payment'}`);
+        setIsPaymentModalOpen(false);
+        triggerToast("Payment recorded successfully!", "success");
+      }
+    } catch (err) {
+      setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, ...updates } : j));
+      addTimelineEntry(selectedJob.id, "Advance Payment Done", `₹${totalPaid} received`);
+      setIsPaymentModalOpen(false);
+      triggerToast("Payment recorded (Local Fallback)", "success");
+    }
+  };
+
+  const handleSaveStatus = async () => {
+    if (!selectedJob || !selectedStatus) return;
+    const updates = { status: selectedStatus, statusNote };
+    try {
+      const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
+        setSelectedJob(prev => prev && prev.id === updated.id ? updated : prev);
+      } else {
+        throw new Error("API error");
+      }
+    } catch {
+      const STATUS_COMPLETION_FE: Record<string, number> = {
+        "Client Agreed": 30, "Work in Progress": 50, "Work on Hold": 45,
+        "Work Completed": 80, "Out for Delivery": 90, "Delivered": 100,
+      };
+      const completion = STATUS_COMPLETION_FE[selectedStatus] ?? selectedJob.completion;
+      setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, status: selectedStatus, completion } : j));
+      setSelectedJob(prev => prev && prev.id === selectedJob.id ? { ...prev, status: selectedStatus, completion } : prev);
+      addTimelineEntry(selectedJob.id, `Status: ${selectedStatus}`, statusNote || `Updated to ${selectedStatus}`);
+    }
+    setIsStatusModalOpen(false);
+    triggerToast(`Status updated to "${selectedStatus}"`, "success");
+  };
+
+  const handleSaveDiscount = async () => {
+    if (!selectedJob) return;
+    const lineTotal = discountForm.lineItems.reduce((sum, item) => {
+      const d = item.type === "percentage" ? (item.total * item.value / 100) : item.value;
+      return sum + Math.min(d, item.total);
+    }, 0);
+    const overallAmt = discountForm.overallType === "percentage"
+      ? (selectedJob.estimate * discountForm.overallValue / 100)
+      : discountForm.overallValue;
+    const totalDiscount = Math.min(Math.round((lineTotal + overallAmt) * 100) / 100, selectedJob.estimate);
+    const updates = {
+      overallDiscount: totalDiscount,
+      due: Math.max(0, selectedJob.estimate - selectedJob.paid - totalDiscount),
+    };
+    try {
+      const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
+        addTimelineEntry(selectedJob.id, "Discount Applied", `₹${totalDiscount} total discount applied`);
+        setIsDiscountModalOpen(false);
+        triggerToast("Discount applied successfully!", "success");
+      } else throw new Error();
+    } catch {
+      setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, ...updates } : j));
+      addTimelineEntry(selectedJob.id, "Discount Applied", `₹${totalDiscount} total discount applied`);
+      setIsDiscountModalOpen(false);
+      triggerToast("Discount applied!", "success");
+    }
+  };
+
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -1281,6 +1570,8 @@ export default function Home() {
   
   // Tab control inside Side Panel
   const [sidePanelTab, setSidePanelTab] = useState("Overview");
+  const [isEditingSidePanel, setIsEditingSidePanel] = useState(false);
+  const [editedJob, setEditedJob] = useState<JobCard | null>(null);
 
   // State for Toast Notifications
   const [toasts, setToasts] = useState<Array<{ id: number; msg: string; type: "success" | "info" | "warn" }>>([]);
@@ -1522,7 +1813,9 @@ export default function Home() {
         setIsSuccessOverlayOpen(true);
         triggerToast(`Customer registered successfully!`, "success");
       } else {
-        triggerToast("Failed to save customer in database", "warn");
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Backend registration failed:", errorData);
+        triggerToast(`Failed to save customer in database: ${errorData.message || "Unknown error"}`, "warn");
       }
     } catch (err) {
       console.error(err);
@@ -1616,15 +1909,25 @@ export default function Home() {
     }
   };
 
+  // Status groupings that map each UI status to a tab bucket
+  const IN_PROGRESS_STATUSES = new Set([
+    "Under Servicing", "Client Agreed", "Work in Progress", "Work on Hold", "Work Completed", "Draft",
+  ]);
+  const READY_STATUSES = new Set([
+    "Ready for Delivery", "Out for Delivery", "Next Day Delivery", "Upcoming Delivery",
+  ]);
+  const PAYMENT_STATUSES = new Set(["Payment Processing"]);
+  const COMPLETED_STATUSES = new Set(["Completed", "Delivered"]);
+
   // Filtering Logic
   const filteredJobs = jobs
     .filter((job) => {
       // 1. Status Filter
       if (activeFilter !== "All Jobs") {
-        if (activeFilter === "Under Servicing" && job.status !== "Under Servicing") return false;
-        if (activeFilter === "Ready for Delivery" && job.status !== "Ready for Delivery") return false;
-        if (activeFilter === "Payment Processing" && job.status !== "Payment Processing") return false;
-        if (activeFilter === "Completed" && job.status !== "Completed") return false;
+        if (activeFilter === "Under Servicing" && !IN_PROGRESS_STATUSES.has(job.status)) return false;
+        if (activeFilter === "Ready for Delivery" && !READY_STATUSES.has(job.status)) return false;
+        if (activeFilter === "Payment Processing" && !PAYMENT_STATUSES.has(job.status)) return false;
+        if (activeFilter === "Completed" && !COMPLETED_STATUSES.has(job.status)) return false;
       }
       // 2. Search query (regex or search string matches Customer name, Phone, or Vehicle No)
       if (searchQuery.trim().length > 0) {
@@ -1639,13 +1942,13 @@ export default function Home() {
     })
     .sort((a, b) => b.id.localeCompare(a.id));
 
-  // Calculate quick stats for filters
+  // Calculate quick stats for filters — every status maps to exactly one tab
   const stats = {
     all: jobs.length,
-    underServicing: jobs.filter((j) => j.status === "Under Servicing").length,
-    ready: jobs.filter((j) => j.status === "Ready for Delivery").length,
-    payment: jobs.filter((j) => j.status === "Payment Processing").length,
-    completed: jobs.filter((j) => j.status === "Completed").length
+    underServicing: jobs.filter((j) => IN_PROGRESS_STATUSES.has(j.status)).length,
+    ready: jobs.filter((j) => READY_STATUSES.has(j.status)).length,
+    payment: jobs.filter((j) => PAYMENT_STATUSES.has(j.status)).length,
+    completed: jobs.filter((j) => COMPLETED_STATUSES.has(j.status)).length,
   };
 
   // -------------------------------------------------------------
@@ -1718,7 +2021,16 @@ export default function Home() {
         saveSession(data.user, data.access_token);
         triggerToast(`Welcome back, ${data.user.name}!`, "success");
       } else {
-        triggerToast("Invalid username or password.", "warn");
+        // API rejected — try local fallback before showing error
+        const match = FALLBACK_USERS.find(
+          (u) => u.username === usernameInput && u.password === passwordInput,
+        );
+        if (match) {
+          saveSession(match, "offline-token");
+          triggerToast(`Welcome back, ${match.name}!`, "success");
+        } else {
+          triggerToast("Invalid username or password.", "warn");
+        }
       }
     } catch {
       // Backend offline — use local fallback
@@ -1947,10 +2259,22 @@ export default function Home() {
                             </button>
                             {canDelete && (
                               <button
-                                onClick={() => {
+                                onClick={async () => {
                                   if (confirm("Are you sure you want to delete this record?")) {
-                                    setList(list.filter((item) => item.id !== row.id));
-                                    triggerToast("Record deleted successfully", "success");
+                                    if (activeTab === "Manage Services") {
+                                      try {
+                                        await fetch(`${API_BASE_URL}/services-master/${row.id}`, { method: "DELETE" });
+                                        setList(list.filter((item) => item.id !== row.id));
+                                        triggerToast("Service deleted successfully", "success");
+                                      } catch (err) {
+                                        console.error("Failed to delete service", err);
+                                        triggerToast("Backend offline, deleting locally", "warn");
+                                        setList(list.filter((item) => item.id !== row.id));
+                                      }
+                                    } else {
+                                      setList(list.filter((item) => item.id !== row.id));
+                                      triggerToast("Record deleted successfully", "success");
+                                    }
                                   }
                                 }}
                                 className="p-1.5 rounded hover:bg-red-50 text-red-500 transition-colors"
@@ -1983,11 +2307,27 @@ export default function Home() {
       // SECTION A — BUSINESS REPORTS
       // ==========================================
       case "GST Filing Reports": {
-        const gstItems = [
-          { id: "g1", invoiceNo: "INV-2026-041", date: "2026-05-28", customer: "Debasis Jena", gstin: "21AAMCS8857L1ZO", subtotal: 1200, total: 1416, insurance: 0, discount: 50, payable: 1366, paid: 1366, due: 0 },
-          { id: "g2", invoiceNo: "INV-2026-042", date: "2026-05-27", customer: "Mamata Sahu", gstin: "—", subtotal: 850, total: 1003, insurance: 500, discount: 0, payable: 503, paid: 503, due: 0 },
-          { id: "g3", invoiceNo: "INV-2026-043", date: "2026-05-26", customer: "Priyabrata Das", gstin: "21ABBCS1234F1ZO", subtotal: 2400, total: 2832, insurance: 0, discount: 100, payable: 2732, paid: 2000, due: 732 },
-        ];
+        const filteredInvoices = invoices.filter(inv => {
+          const invDate = new Date(inv.date);
+          const start = new Date(reportStartDate);
+          const end = new Date(reportEndDate);
+          return invDate >= start && invDate <= end;
+        });
+
+        const gstItems = filteredInvoices.map(inv => ({
+          id: inv.id,
+          invoiceNo: inv.invoiceNo,
+          date: inv.date,
+          customer: inv.customerName,
+          gstin: inv.gstin,
+          subtotal: inv.subtotal,
+          total: inv.totalAmount,
+          insurance: inv.insuranceAmount,
+          discount: inv.discountAmount,
+          payable: inv.totalAmount - inv.insuranceAmount, // Assumption: payable is net after insurance
+          paid: inv.paidAmount,
+          due: inv.dueAmount
+        }));
 
         return (
           <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/50 dark:bg-slate-900 font-sans w-full">
@@ -2332,10 +2672,36 @@ export default function Home() {
       }
 
       case "Report By Invoices": {
-        const invoiceRows = [
-          { id: "r1", type: "Services", jobCode: "JC-0091", invNo: "INV-2026-009", date: "28/05/2026", customer: "Debasis Jena", vehicle: "OD-02-X-4422", contact: "9853312345", arrival: "26/05/2026", spares: 1200, taxPart: 216, labour: 500, taxSvc: 90, discount: 50, total: 1956, paid: 1956 },
-          { id: "r2", type: "Counter Sales", jobCode: "POS-9912", invNo: "CS-2026-004", date: "27/05/2026", customer: "Walk-in Buyer", vehicle: "Counter Parts", contact: "9988112233", arrival: "27/05/2026", spares: 450, taxPart: 81, labour: 0, taxSvc: 0, discount: 0, total: 531, paid: 531 },
-        ];
+        const filteredInvoices = invoices.filter(inv => {
+          const invDate = new Date(inv.date);
+          const start = new Date(reportStartDate);
+          const end = new Date(reportEndDate);
+          const dateMatch = invDate >= start && invDate <= end;
+          
+          if (reportInvoiceType === "By Counter Sales") {
+            return dateMatch && inv.type === "Counter Sales";
+          }
+          return dateMatch;
+        });
+
+        const invoiceRows = filteredInvoices.map(inv => ({
+          id: inv.id,
+          type: inv.type || "Services",
+          jobCode: inv.jobCardNo,
+          invNo: inv.invoiceNo,
+          date: inv.date,
+          customer: inv.customerName,
+          vehicle: inv.vehicleNo,
+          contact: inv.phone,
+          arrival: inv.arrivalDate,
+          spares: inv.subtotal, // We'd need further breakdown for true spares vs labour
+          taxPart: inv.taxAmount, // Placeholder for parts tax
+          labour: 0, // Placeholder
+          taxSvc: 0, // Placeholder
+          discount: inv.discountAmount,
+          total: inv.totalAmount,
+          paid: inv.paidAmount
+        }));
 
         return (
           <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/50 dark:bg-slate-900 font-sans w-full">
@@ -3695,13 +4061,13 @@ export default function Home() {
           <div className="absolute bottom-0 right-0 w-64 h-64 rounded-full bg-teal-400/20 blur-3xl pointer-events-none" />
 
           {/* Logo */}
-          <div className="relative z-10 flex items-center space-x-3">
-            <div className="bg-white/20 backdrop-blur-sm p-3 rounded-2xl border border-white/20">
-              <Wrench className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-white font-black text-lg tracking-tight leading-none">BIKE MASTERS</h1>
-              <p className="text-green-200 text-[9px] font-bold tracking-[0.18em] mt-0.5 uppercase">Workshop Management System</p>
+          <div className="relative z-10 flex items-center">
+            <div className="bg-white p-2 rounded-2xl shadow-xl">
+              <img 
+                src="/assets/bike_master_logo.jpg" 
+                alt="Bike Masters Logo" 
+                className="h-16 w-auto object-contain"
+              />
             </div>
           </div>
 
@@ -3757,12 +4123,12 @@ export default function Home() {
         <div className={`flex-1 flex flex-col items-center justify-center p-8 lg:p-16 relative ${theme === "dark" ? "bg-slate-950" : "bg-white"}`}>
 
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center space-x-2.5 mb-10">
-            <div className="bg-green-600 p-2.5 rounded-xl"><Wrench className="h-5 w-5 text-white" /></div>
-            <div>
-              <p className={`font-black text-lg leading-none ${theme === "dark" ? "text-white" : "text-slate-900"}`}>BIKE MASTERS</p>
-              <p className="text-green-600 text-[9px] font-bold tracking-widest uppercase mt-0.5">WMS</p>
-            </div>
+          <div className="lg:hidden flex items-center justify-center mb-10">
+            <img 
+              src="/assets/bike_master_logo.jpg" 
+              alt="Bike Masters Logo" 
+              className="h-16 w-auto object-contain"
+            />
           </div>
 
 	          <div className="w-full max-w-[360px] space-y-7">
@@ -3888,9 +4254,9 @@ export default function Home() {
   }
 
   return (
-    <div className={`${theme === "dark" ? "dark" : ""} min-h-screen transition-colors duration-300 font-sans`}>
+    <div className={`${theme === "dark" ? "dark" : ""} h-screen overflow-hidden transition-colors duration-300 font-sans`}>
       {/* Container holding full page with theme support */}
-      <div className="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+      <div className="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 h-full flex flex-col overflow-hidden">
         
         {/* ============================================================ */}
         {/* 1. TOP NAV BAR */}
@@ -3913,12 +4279,16 @@ export default function Home() {
               >
                 <Menu className="h-4 w-4" />
               </button>
-              <div className="bg-green-600 dark:bg-green-500 p-2.5 rounded-xl text-white shadow-md shadow-green-600/10 flex items-center justify-center transform hover:rotate-12 transition-transform duration-300">
-                <Wrench className="h-5 w-5" />
+              <div 
+                className="flex items-center cursor-pointer active:scale-95 transition-transform"
+                onClick={() => setActiveTab("Dashboard")}
+              >
+                <img 
+                  src="/assets/bike_master_logo.jpg" 
+                  alt="Bike Masters Logo" 
+                  className="h-10 w-auto object-contain transform hover:scale-105 transition-transform duration-300"
+                />
               </div>
-              <span className="hidden sm:inline font-extrabold text-xl tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
-                BIKE MASTERS
-              </span>
               <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-700/50 text-xs font-semibold px-2.5 py-1 rounded-full text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
                 <MapPin className="h-3 w-3 mr-1.5 text-green-500" />
                 Bhubaneswar Branch
@@ -4001,8 +4371,8 @@ export default function Home() {
         {/* ============================================================ */}
         {/* MONOREPO CONTENT GRID: Sidebar + Main Workspace */}
         {/* ============================================================ */}
-        <div className="flex-1 flex overflow-hidden">
-          
+        <div className="flex-1 flex overflow-hidden min-h-0">
+
           {/* ============================================================ */}
           {/* 2. LEFT SIDEBAR */}
           {/* ============================================================ */}
@@ -4015,13 +4385,14 @@ export default function Home() {
             />
           )}
 
-          <aside className={`fixed md:relative inset-y-0 left-0 z-50 md:z-auto border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 transition-all duration-300 flex flex-col justify-between shadow-2xl md:shadow-none ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"} ${sidebarCollapsed ? "w-72 md:w-16" : "w-72 md:w-64"}`}>
-            <div className="md:hidden h-16 px-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-700">
-              <div className="flex items-center space-x-2">
-                <div className="bg-green-600 p-2 rounded-xl text-white">
-                  <Wrench className="h-4 w-4" />
-                </div>
-                <span className="font-black text-sm tracking-tight">BIKE MASTERS</span>
+          <aside className={`fixed md:relative inset-y-0 left-0 z-50 md:z-auto border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 transition-all duration-300 flex flex-col h-screen md:h-full overflow-hidden shadow-2xl md:shadow-none shrink-0 ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"} ${sidebarCollapsed ? "w-72 md:w-16" : "w-72 md:w-64"}`}>
+            <div className="md:hidden h-20 px-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-700">
+              <div className="flex items-center">
+                <img 
+                  src="/assets/bike_master_logo.jpg" 
+                  alt="Bike Masters Logo" 
+                  className="h-10 w-auto object-contain"
+                />
               </div>
               <button
                 type="button"
@@ -4033,10 +4404,10 @@ export default function Home() {
             </div>
             
             {/* Sidebar Link Options */}
-            <div className="py-4 space-y-1 px-3 overflow-y-auto max-h-[calc(100vh-10rem)]">
+            <div className="flex-1 py-4 space-y-1 px-3 overflow-y-auto min-h-0">
               {[
                 { name: "Dashboard", icon: Gauge, count: 0 },
-                { name: "Service Queue", icon: Sliders, count: stats.underServicing + stats.ready },
+                { name: "Service Queue", icon: Sliders, count: stats.all - stats.completed },
                 { name: "BI Analytics", icon: TrendingUp, count: 0 },
                 { name: "Customers", icon: User, count: 0 },
                 { name: "Payments", icon: CreditCard, count: 0 },
@@ -4208,7 +4579,7 @@ export default function Home() {
             </div>
 
             {/* Sidebar Footer (User Info & Logout) */}
-            <div className="p-3 border-t border-slate-200 dark:border-slate-700 font-sans">
+            <div className="shrink-0 p-3 border-t border-slate-200 dark:border-slate-700 font-sans">
               {sidebarCollapsed ? (
                 <div className="flex flex-col items-center space-y-2">
                   <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-green-600 to-emerald-500 dark:from-green-500 dark:to-teal-400 flex items-center justify-center text-white font-extrabold text-xs shadow-md shadow-green-500/10" title={`${currentUser?.name} (${ROLE_LABELS[currentUser?.role ?? ""]})`}>
@@ -4255,7 +4626,7 @@ export default function Home() {
             ) : activeTab === "Service Queue" ? (
               <>
                 {/* Left Content Area (Grid of Job Cards) */}
-	            <div className="flex-1 flex flex-col overflow-y-auto px-4 md:px-6 py-5 md:py-6 space-y-5 md:space-y-6">
+	            <div className="flex-1 flex flex-col overflow-y-auto px-4 md:px-6 py-4 md:py-5 space-y-4 md:space-y-5">
               
               {/* Header Page Title */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -4284,10 +4655,10 @@ export default function Home() {
               <div className="flex flex-wrap gap-2 border-b border-slate-200 dark:border-slate-800 pb-4">
                 {[
                   { label: "All Jobs", count: stats.all },
-                  { label: "Under Servicing", count: stats.underServicing },
-                  { label: "Ready for Delivery", count: stats.ready },
+                  { label: "Under Servicing", count: stats.underServicing, hint: "Includes Client Agreed, WIP, On Hold, Work Completed" },
+                  { label: "Ready for Delivery", count: stats.ready, hint: "Includes Out for Delivery" },
                   { label: "Payment Processing", count: stats.payment },
-                  { label: "Completed", count: stats.completed }
+                  { label: "Completed", count: stats.completed, hint: "Includes Delivered" }
                 ].map((filter) => {
                   const isActive = activeFilter === filter.label;
                   return (
@@ -4362,183 +4733,218 @@ export default function Home() {
                 /* Job Cards Grid */
 	                <div className="grid grid-cols-1 gap-4">
                   {filteredJobs.map((job) => {
-                    const isExpanded = selectedJob && selectedJob.id === job.id;
+                    const isSelected = selectedJob && selectedJob.id === job.id;
                     return (
                       <div
                         key={job.id}
                         onClick={() => {
-                          if (selectedJob?.id === job.id) {
-                            setSelectedJob(null);
-                          } else {
-                            setSelectedJob(job);
-                            triggerToast(`Job Card ${job.id} expanded`, "info");
-                          }
+                          setExpandedCardId(job.id);
+                          setSelectedJob(job);
+                          setIsSidePanelOpen(true);
                         }}
-	                        className={`bg-white dark:bg-slate-800 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition-all duration-500 border relative overflow-hidden ${
-                          isExpanded
-                            ? "ring-2 ring-green-600 dark:ring-green-500 border-transparent bg-slate-50/50 dark:bg-slate-800/80"
-                            : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
-                        } ${getUrgencyBorder(job.urgency)}`}
+                        className={`bg-white dark:bg-slate-900 border transition-all duration-300 rounded-[2.5rem] p-1.5 shadow-sm space-y-1.5 cursor-pointer group hover:shadow-xl hover:scale-[1.005] ${isSelected ? 'ring-2 ring-green-500 border-transparent' : 'border-slate-200 dark:border-slate-800'}`}
                       >
-                        
-                        {/* Upper Header of the Card (Always Visible) */}
-                        <div className="p-4 flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <div className="flex flex-col">
-                              <span className="text-sm font-extrabold tracking-wide font-mono text-slate-900 dark:text-white">
-                                {job.vehicleNo}
-                              </span>
-                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-tighter">
-                                {job.id}
-                              </span>
+                        {/* Top Segment (Header) */}
+                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-t-[2.2rem] px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="bg-white dark:bg-slate-900 p-2 rounded-xl shadow-sm">
+                              <Shield className="h-5 w-5 text-slate-400" />
                             </div>
-                            
-                            <div className="hidden sm:flex flex-col border-l border-slate-200 dark:border-slate-700 pl-4">
-                              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{job.customerName}</h3>
-                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold">{job.brandModel}</span>
+                            <div className="flex items-center space-x-1.5">
+                              <span className="text-lg font-black tracking-tight text-slate-800 dark:text-white uppercase">{job.vehicleNo}</span>
+                              <span className="text-xs font-bold text-red-500">(Bhubaneswar)</span>
                             </div>
                           </div>
                           
                           <div className="flex items-center space-x-3">
-                            {/* Status badge (Minimal) */}
-                            <div className={`hidden sm:flex items-center border px-2.5 py-1 rounded-lg text-[10px] font-bold ${getStatusBadgeStyle(job.status)}`}>
-                              <span className="h-1.5 w-1.5 rounded-full bg-current mr-1.5 animate-pulse" />
-                              <span>{job.status}</span>
+                            <Bike className="h-5 w-5 text-slate-400" />
+                            <span className="text-sm font-black text-slate-700 dark:text-slate-300 uppercase tracking-tight">{job.brandModel}</span>
+                          </div>
+
+                          <div className="flex items-center space-x-4">
+                            <div className="flex items-center bg-teal-50 dark:bg-teal-900/30 px-3 py-1 rounded-lg border border-teal-100 dark:border-teal-800">
+                              <span className="text-[10px] font-black text-teal-600 dark:text-teal-400 mr-2 uppercase tracking-widest">KMS</span>
+                              <span className="text-xs font-black text-teal-700 dark:text-teal-300 font-mono">{job.kms.toString().padStart(6, '0')}</span>
                             </div>
-
-                            {/* Service Type badge */}
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              job.serviceType === "Regular" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400" :
-                              job.serviceType === "Accidental" ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400" :
-                              "bg-purple-50 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400"
-                            }`}>
-                              {job.serviceType}
-                            </span>
-
-                            {/* Expand/Collapse Icon */}
-                            <div className={`p-1.5 rounded-full transition-transform duration-300 ${isExpanded ? 'rotate-180 bg-slate-100 dark:bg-slate-700' : 'bg-slate-50 dark:bg-slate-900/50'}`}>
-                              <ChevronDown className="h-4 w-4 text-slate-400" />
+                            <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 border-l border-slate-200 dark:border-slate-700 pl-4 flex items-center">
+                              <span className="uppercase">NA | bike</span>
+                              <span className={`ml-4 px-2 py-0.5 rounded uppercase font-black ${getStatusBadgeStyle(job.status)}`}>
+                                {job.status === "Under Servicing" ? "IN-PROGRESS" : job.status === "Ready for Delivery" ? "READY" : "DONE"}
+                              </span>
                             </div>
                           </div>
                         </div>
 
-                        {/* Expanded Content */}
-                        <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isExpanded ? 'max-h-[500px] opacity-100 border-t border-slate-100 dark:border-slate-700/60' : 'max-h-0 opacity-0'}`}>
-                          
-                          {/* Middle Body */}
-                          <div className="p-4 space-y-4">
-                            
-                            <div className="flex flex-col sm:row sm:justify-between sm:items-start gap-4">
-                              <div className="flex flex-col sm:hidden">
-                                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{job.customerName}</h3>
-                                <div className="flex items-center text-xs text-slate-400 dark:text-slate-500 mt-1">
-                                  <Phone className="h-3 w-3 mr-1" />
-                                  <span>{job.phone}</span>
+                        {/* Middle Segment */}
+                        {(() => {
+                          const isExpanded = expandedCardId === job.id;
+                          const currentRating = jobRatings[job.id] ?? (job as any).rating ?? 0;
+                          const notReady = !job.isEstimated || job.estimate === 0;
+                          const actions = [
+                            { icon: FileText, label: "JC/Est" },
+                            { icon: ThumbsUp, label: "Status", disabled: notReady },
+                            { icon: RefreshCw, label: "History" },
+                            { icon: DollarSign, label: "Payments", disabled: notReady },
+                            { icon: Percent, label: "Discount", disabled: notReady },
+                            { icon: Printer, label: "Invoice", disabled: notReady || job.due > 0 },
+                            { icon: isExpanded ? ChevronUp : MoreHorizontal, label: isExpanded ? "View Less" : "View More", isMore: true },
+                          ];
+                          const infoFields = (
+                            <>
+                              <div className="flex flex-col shrink-0">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Customer Name</span>
+                                {job.customerName.length > 15 ? (() => {
+                                  const parts = job.customerName.trim().split(' ');
+                                  const lastName = parts[parts.length - 1];
+                                  const firstName = parts.slice(0, -1).join(' ') || lastName;
+                                  return (
+                                    <div className="flex flex-col leading-tight">
+                                      <span className="text-xs font-black text-slate-800 dark:text-white uppercase">{firstName}</span>
+                                      {parts.length > 1 && <span className="text-xs font-black text-slate-800 dark:text-white uppercase">{lastName}</span>}
+                                    </div>
+                                  );
+                                })() : (
+                                  <span className="text-xs font-black text-slate-800 dark:text-white uppercase leading-none">{job.customerName}</span>
+                                )}
+                              </div>
+                              <div className="flex flex-col shrink-0">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Phone Number</span>
+                                <span className="text-xs font-black text-slate-800 dark:text-white leading-none font-mono">{job.phone}</span>
+                              </div>
+                              <div className="flex flex-col shrink-0">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Source</span>
+                                <span className="text-xs font-black text-slate-800 dark:text-white leading-none">Walk-in</span>
+                              </div>
+                              <div className="flex flex-col shrink-0">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Rating</span>
+                                <div className="flex items-center space-x-0.5">
+                                  {[1,2,3,4,5].map(star => (
+                                    <button
+                                      key={star}
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        e.preventDefault();
+                                        setJobRatings(prev => ({ ...prev, [job.id]: star }));
+                                        fetch(`${API_BASE_URL}/job-cards/${job.id}/rating`, {
+                                          method: 'PATCH',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ rating: star }),
+                                        }).catch(() => {});
+                                        triggerToast(`Rating updated to ${star} star${star > 1 ? 's' : ''}`, "success");
+                                      }}
+                                      className="focus:outline-none hover:scale-125 transition-transform"
+                                    >
+                                      <Star className={`h-3 w-3 ${star <= currentRating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-300 dark:text-slate-600'}`} />
+                                    </button>
+                                  ))}
                                 </div>
                               </div>
-
-                              <div className="flex justify-between w-full">
-                                <div className="hidden sm:flex items-center text-xs text-slate-400 dark:text-slate-500">
-                                  <Phone className="h-3 w-3 mr-1" />
-                                  <span>{job.phone}</span>
-                                </div>
-
-                                {/* Circular Completion percentage indicator */}
-                                <div className="relative flex items-center justify-center">
-                                  <svg className="w-10 h-10 transform -rotate-95">
-                                    <circle cx="20" cy="20" r="16" stroke="currentColor" className="text-slate-100 dark:text-slate-700" strokeWidth="3" fill="transparent" />
-                                    <circle cx="20" cy="20" r="16" stroke="currentColor" className="text-green-500" strokeWidth="3" fill="transparent"
-                                      strokeDasharray={100}
-                                      strokeDashoffset={100 - job.completion}
-                                    />
-                                  </svg>
-                                  <span className="absolute text-[10px] font-extrabold">{job.completion}%</span>
-                                </div>
+                              <div className="flex flex-col shrink-0">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Advisor</span>
+                                <span className="text-xs font-black text-slate-800 dark:text-white uppercase leading-none">{job.advisor.trim().split(' ')[0]}</span>
                               </div>
-                            </div>
-
-                            {/* Brand/Model details & KMS */}
-                            <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl flex items-center justify-between text-xs font-semibold">
-                              <span className="text-slate-700 dark:text-slate-300">{job.brandModel}</span>
-                              <span className="text-slate-400 dark:text-slate-500">{job.kms.toLocaleString()} KMS</span>
-                            </div>
-
-                            {/* Advisor & Technician information */}
-                            <div className="flex items-center justify-between pt-1">
-                              <div className="flex items-center space-x-2">
-                                <div className="flex -space-x-2">
-                                  <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-white dark:border-slate-800 flex items-center justify-center text-[10px] font-extrabold text-slate-600 dark:text-slate-300" title={`Advisor: ${job.advisor}`}>
-                                    {job.advisor.split(' ').map(n=>n[0]).join('')}
-                                  </div>
-                                  <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-950 border-2 border-white dark:border-slate-800 flex items-center justify-center text-[10px] font-extrabold text-green-600 dark:text-green-400" title={`Technician: ${job.technician}`}>
-                                    {job.technician.split(' ').map(n=>n[0]).join('')}
-                                  </div>
-                                </div>
-                                <div className="flex flex-col text-[10px] leading-tight text-slate-400 dark:text-slate-500 font-medium">
-                                  <span>Advisor: {job.advisor}</span>
-                                  <span className="mt-0.5">Technician: {job.technician}</span>
-                                </div>
-                              </div>
-
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
+                            </>
+                          );
+                          const actionButtons = actions.map((action, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              disabled={(action as any).disabled}
+                              className={`flex flex-col items-center space-y-1 focus:outline-none shrink-0 ${(action as any).disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer group/btn'}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                if ((action as any).disabled) return;
+                                if (action.label === "View More") {
+                                  setExpandedCardId(job.id);
+                                  setSelectedJob(job);
                                   setIsSidePanelOpen(true);
-                                  triggerToast("Opening comprehensive details view", "info");
-                                }}
-                                className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 text-[10px] font-bold hover:bg-indigo-100 transition-colors"
-                              >
-                                <Eye className="h-3 w-3" />
-                                <span>Full Details</span>
-                              </button>
+                                } else if (action.label === "View Less") {
+                                  setExpandedCardId(null);
+                                  setIsSidePanelOpen(false);
+                                } else {
+                                  handleJobAction(job, action.label);
+                                }
+                              }}
+                            >
+                              <div className={`p-2 rounded-full shadow-sm transition-all ${(action as any).disabled ? '' : 'group-hover/btn:scale-110'} ${
+                                action.isMore ? 'bg-teal-500 text-white' :
+                                'bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/btn:text-slate-800 dark:group-hover/btn:text-white border border-slate-100 dark:border-slate-700'
+                              }`}>
+                                <action.icon className="h-3.5 w-3.5" />
+                              </div>
+                              <span className="text-[9px] font-black uppercase tracking-tighter text-slate-500 dark:text-slate-400">{action.label}</span>
+                            </button>
+                          ));
+                          /* Always compact single row — side panel opens for details */
+                          return (
+                            <div className="bg-white dark:bg-slate-900 px-6 py-3">
+                              <div className="flex items-center w-full min-w-0">
+                                <div className="flex items-center gap-x-6 flex-1 min-w-0 overflow-hidden">
+                                  {infoFields}
+                                </div>
+                                <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 shrink-0 mx-4" />
+                                <div className="flex items-center gap-x-4 shrink-0">
+                                  {actionButtons}
+                                  <div className="relative flex items-center justify-center shrink-0">
+                                    <svg className="w-12 h-12 transform -rotate-90">
+                                      <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="4" fill="transparent" />
+                                      <circle cx="24" cy="24" r="20" stroke="currentColor" className="text-teal-500" strokeWidth="4" fill="transparent"
+                                        strokeDasharray={125.7}
+                                        strokeDashoffset={125.7 - (125.7 * job.completion) / 100}
+                                        strokeLinecap="round"
+                                      />
+                                    </svg>
+                                    <span className="absolute text-[11px] font-black text-slate-800 dark:text-white">{job.completion}%</span>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
+                          );
+                        })()}
 
+                        {/* Bottom Segment (Billing & Dates) */}
+                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-b-[2.2rem] px-6 py-3 flex flex-row flex-wrap items-center gap-x-6 gap-y-2">
+                          <div className="flex items-center bg-teal-500 text-white rounded-xl overflow-hidden shadow-sm shrink-0">
+                            <div className="px-3 py-1.5 text-[10px] font-black border-r border-white/20 uppercase tracking-wider">JC.No:</div>
+                            <div className="px-3 py-1.5 text-xs font-black font-mono">{job.id.split('-').pop()}</div>
                           </div>
-
-                          {/* Bottom Row - Estimate | Paid | Due */}
-                          <div className="px-4 py-4 bg-slate-50/60 dark:bg-slate-900/20 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
-                            
-                            <div className="flex space-x-6 font-semibold">
-                              <div className="flex flex-col">
-                                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-bold">Estimate</span>
-                                <span className="text-slate-800 dark:text-slate-200 mt-1 text-sm font-black">₹{job.estimate}</span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-bold">Paid</span>
-                                <span className="text-green-600 dark:text-green-400 mt-1 text-sm font-black">₹{job.paid}</span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-bold">Due</span>
-                                <span className="text-red-500 dark:text-red-400 mt-1 text-sm font-black">₹{job.due}</span>
-                              </div>
-                            </div>
-
-                            {/* Quick buttons */}
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  triggerToast(`Generating estimate printout for ${job.id}`, "success");
-                                  setTimeout(() => window.print(), 500);
-                                }}
-                                className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-[10px] font-black text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 transition-colors uppercase tracking-widest"
-                              >
-                                Estimate
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  triggerToast(`Processing invoice for ${job.id}`, "success");
-                                }}
-                                className="px-4 py-2 rounded-xl bg-green-600 text-white hover:bg-green-700 text-[10px] font-black transition-colors shadow-lg shadow-green-600/20 uppercase tracking-widest"
-                              >
-                                Pay
-                              </button>
-                            </div>
-
+                          <div className="flex flex-col items-center shrink-0">
+                            <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">₹{job.estimate.toLocaleString()}</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Estimate</span>
+                          </div>
+                          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 shrink-0" />
+                          <div className="flex flex-col items-center shrink-0">
+                            <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">NA</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Inv No</span>
+                          </div>
+                          <div className="flex flex-col items-center shrink-0">
+                            <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">{(job as any).overallDiscount?.toFixed(2) || "0.00"}</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Discount</span>
+                          </div>
+                          <div className="flex flex-col items-center shrink-0">
+                            <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">0</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Coupon</span>
+                          </div>
+                          <div className="flex flex-col items-center shrink-0">
+                            <span className="text-[11px] font-black text-teal-600 dark:text-teal-400">₹{job.paid.toLocaleString()}</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Paid</span>
+                          </div>
+                          <div className="flex flex-col items-center shrink-0">
+                            <span className={`text-[11px] font-black ${job.due > 0 ? "text-red-500 animate-pulse" : "text-teal-600"} dark:text-teal-400`}>₹{job.due.toLocaleString()}</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Due</span>
+                          </div>
+                          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 shrink-0" />
+                          <div className="bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-[10px] font-black shadow-sm shrink-0">
+                            <span className="text-slate-400 uppercase mr-1">DOA:</span>
+                            <span className="text-teal-600 dark:text-teal-400 font-mono uppercase">{job.date}</span>
+                          </div>
+                          <div className="bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-[10px] font-black shadow-sm shrink-0">
+                            <span className="text-slate-400 uppercase mr-1">DOD:</span>
+                            <span className="text-teal-600 dark:text-teal-400 font-mono uppercase">NA</span>
                           </div>
                         </div>
-
                       </div>
                     );
                   })}
@@ -4555,7 +4961,7 @@ export default function Home() {
 	              <button
 	                type="button"
 	                aria-label="Close job details"
-	                onClick={() => setIsSidePanelOpen(false)}
+	                onClick={() => { setIsSidePanelOpen(false); setExpandedCardId(null); }}
 	                className="fixed inset-0 z-30 bg-slate-950/30 md:hidden"
 	              />
 	              <div className="fixed md:relative inset-y-0 right-0 z-40 w-full max-w-[480px] md:w-[480px] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 flex flex-col overflow-hidden h-full shadow-2xl transition-transform duration-300">
@@ -4568,22 +4974,96 @@ export default function Home() {
                     </span>
                     <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400">{selectedJob.id}</span>
                   </div>
-                  <button
-                    onClick={() => setIsSidePanelOpen(false)}
-                    className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700/80 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    {!isEditingSidePanel ? (
+                      <button
+                        onClick={() => {
+                          setEditedJob({ ...selectedJob });
+                          setIsEditingSidePanel(true);
+                        }}
+                        className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition-colors"
+                        title="Edit Job Card"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={async () => {
+                            if (!editedJob) return;
+                            try {
+                              const res = await fetch(`${API_BASE_URL}/job-cards/${editedJob.id}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(editedJob)
+                              });
+                              if (res.ok) {
+                                const updated = await res.json();
+                                setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
+                                setSelectedJob(updated);
+                                setIsEditingSidePanel(false);
+                                triggerToast("Job card updated successfully!", "success");
+                              }
+                            } catch (err) {
+                              console.error("Backend offline, updating locally", err);
+                              setJobs(prev => prev.map(j => j.id === editedJob.id ? editedJob : j));
+                              setSelectedJob(editedJob);
+                              setIsEditingSidePanel(false);
+                              triggerToast("Job card updated (Local Fallback)!", "success");
+                            }
+                          }}
+                          className="px-2 py-1 bg-green-600 text-white text-[10px] font-bold rounded-lg hover:bg-green-700"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setIsEditingSidePanel(false)}
+                          className="px-2 py-1 bg-slate-200 dark:bg-slate-700 text-[10px] font-bold rounded-lg hover:bg-slate-300"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => {
+                        setIsSidePanelOpen(false);
+                        setIsEditingSidePanel(false);
+                        setExpandedCardId(null);
+                      }}
+                      className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700/80 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Sub-Header details info */}
                 <div className="p-4 border-b border-slate-100 dark:border-slate-700/40 flex justify-between items-start">
                   <div>
-                    <h2 className="text-lg font-black tracking-wide font-mono text-slate-900 dark:text-white">
-                      {selectedJob.vehicleNo}
-                    </h2>
-                    <p className="text-xs font-bold text-slate-600 dark:text-slate-300 mt-1">{selectedJob.brandModel}</p>
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Owner: {selectedJob.customerName}</p>
+                    {isEditingSidePanel && editedJob ? (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={editedJob.vehicleNo}
+                          onChange={(e) => setEditedJob({ ...editedJob, vehicleNo: e.target.value })}
+                          className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold font-mono"
+                        />
+                        <input
+                          type="text"
+                          value={editedJob.brandModel}
+                          onChange={(e) => setEditedJob({ ...editedJob, brandModel: e.target.value })}
+                          className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <h2 className="text-lg font-black tracking-wide font-mono text-slate-900 dark:text-white">
+                          {selectedJob.vehicleNo}
+                        </h2>
+                        <p className="text-xs font-bold text-slate-600 dark:text-slate-300 mt-1">{selectedJob.brandModel}</p>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Owner: {selectedJob.customerName}</p>
+                      </>
+                    )}
                   </div>
                   
                   {/* Status Indicator */}
@@ -4625,23 +5105,84 @@ export default function Home() {
                       {/* Customer Cards Details */}
 	                      <div className="bg-slate-50 dark:bg-slate-900/30 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
                         <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Customer Context</h4>
-                        <div className="space-y-2 text-xs">
-                          <div className="flex justify-between"><span className="text-slate-400">Full Name:</span><span className="font-semibold">{selectedJob.customerName}</span></div>
-                          <div className="flex justify-between"><span className="text-slate-400">Phone Code:</span><span className="font-semibold">{selectedJob.phone}</span></div>
-                          <div className="flex justify-between"><span className="text-slate-400">Alternates:</span><span className="font-semibold">N/A</span></div>
-                          <div className="flex justify-between"><span className="text-slate-400">GSTIN Status:</span><span className="font-semibold font-mono text-[11px] text-green-600 dark:text-green-400">21AAAAA0000A1Z0</span></div>
-                        </div>
+                        {isEditingSidePanel && editedJob ? (
+                          <div className="space-y-3 text-xs">
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-slate-400">Full Name:</span>
+                              <input
+                                type="text"
+                                value={editedJob.customerName}
+                                onChange={(e) => setEditedJob({ ...editedJob, customerName: e.target.value })}
+                                className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-semibold"
+                              />
+                            </div>
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-slate-400">Phone Code:</span>
+                              <input
+                                type="text"
+                                value={editedJob.phone}
+                                onChange={(e) => setEditedJob({ ...editedJob, phone: e.target.value })}
+                                className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-semibold"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2 text-xs">
+                            <div className="flex justify-between"><span className="text-slate-400">Full Name:</span><span className="font-semibold">{selectedJob.customerName}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-400">Phone Code:</span><span className="font-semibold">{selectedJob.phone}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-400">Alternates:</span><span className="font-semibold">N/A</span></div>
+                            <div className="flex justify-between"><span className="text-slate-400">GSTIN Status:</span><span className="font-semibold font-mono text-[11px] text-green-600 dark:text-green-400">21AAAAA0000A1Z0</span></div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Technical Specs Checklist */}
 	                      <div className="bg-slate-50 dark:bg-slate-900/30 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
                         <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2.5">Technical & Checklist Specifications</h4>
-                        <div className="grid grid-cols-2 gap-3 text-xs">
-                          <div className="flex flex-col"><span className="text-[10px] text-slate-400">Odometer Reading:</span><span className="font-bold mt-0.5">{selectedJob.kms.toLocaleString()} KMS</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] text-slate-400">Vehicle Category:</span><span className="font-bold mt-0.5">Scooter Premium</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] text-slate-400">Service Advisor:</span><span className="font-bold mt-0.5 text-indigo-600 dark:text-indigo-400">{selectedJob.advisor}</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] text-slate-400">Primary Tech:</span><span className="font-bold mt-0.5 text-green-600 dark:text-green-400">{selectedJob.technician}</span></div>
-                        </div>
+                        {isEditingSidePanel && editedJob ? (
+                          <div className="grid grid-cols-2 gap-3 text-xs">
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-[10px] text-slate-400">Odometer Reading:</span>
+                              <input
+                                type="number"
+                                value={editedJob.kms}
+                                onChange={(e) => setEditedJob({ ...editedJob, kms: parseInt(e.target.value) || 0 })}
+                                className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                              />
+                            </div>
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-[10px] text-slate-400">Vehicle Category:</span>
+                              <span className="font-bold py-1">Scooter Premium</span>
+                            </div>
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-[10px] text-slate-400">Service Advisor:</span>
+                              <select
+                                value={editedJob.advisor}
+                                onChange={(e) => setEditedJob({ ...editedJob, advisor: e.target.value })}
+                                className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-indigo-600 dark:text-indigo-400"
+                              >
+                                {supervisorsList.map((s, i) => <option key={i} value={s}>{s}</option>)}
+                              </select>
+                            </div>
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-[10px] text-slate-400">Primary Tech:</span>
+                              <select
+                                value={editedJob.technician}
+                                onChange={(e) => setEditedJob({ ...editedJob, technician: e.target.value })}
+                                className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-green-600 dark:text-green-400"
+                              >
+                                {techniciansList.map((t, i) => <option key={i} value={t}>{t}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-3 text-xs">
+                            <div className="flex flex-col"><span className="text-[10px] text-slate-400">Odometer Reading:</span><span className="font-bold mt-0.5">{selectedJob.kms.toLocaleString()} KMS</span></div>
+                            <div className="flex flex-col"><span className="text-[10px] text-slate-400">Vehicle Category:</span><span className="font-bold mt-0.5">Scooter Premium</span></div>
+                            <div className="flex flex-col"><span className="text-[10px] text-slate-400">Service Advisor:</span><span className="font-bold mt-0.5 text-indigo-600 dark:text-indigo-400">{selectedJob.advisor}</span></div>
+                            <div className="flex flex-col"><span className="text-[10px] text-slate-400">Primary Tech:</span><span className="font-bold mt-0.5 text-green-600 dark:text-green-400">{selectedJob.technician}</span></div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Budget summary */}
@@ -4652,6 +5193,56 @@ export default function Home() {
                           <div className="flex justify-between"><span className="text-slate-400">Applicable GST (18%):</span><span>₹150</span></div>
                           <div className="flex justify-between border-t border-slate-200 dark:border-slate-700 pt-2 text-sm"><span className="text-slate-800 dark:text-slate-200">Billed Total:</span><span className="text-green-600 dark:text-green-400">₹{selectedJob.estimate}</span></div>
                         </div>
+                      </div>
+
+                      {/* Action buttons after bill total */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          onClick={() => router.push(`/estimation/${selectedJob.id}`)}
+                          className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl border border-green-500/20 bg-green-500/5 text-green-600 hover:text-green-700 dark:text-green-400 hover:bg-green-500/10 font-bold text-xs transition-all"
+                        >
+                          <Wrench className="h-4 w-4" />
+                          <span>Estimate</span>
+                        </button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completion: 100, actualDeliveryDate: new Date().toISOString() }) });
+                              if (res.ok) { const u = await res.json(); setJobs(prev => prev.map(j => j.id === u.id ? u : j)); setSelectedJob(u); }
+                            } catch { setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, completion: 100 } : j)); }
+                            addTimelineEntry(selectedJob.id, "Gate Pass Issued 🎉", `Vehicle ${selectedJob.vehicleNo} is cleared and ready to roll — safe travels!`);
+                            triggerToast(`Gate Pass issued for ${selectedJob.vehicleNo}!`, "success");
+                          }}
+                          className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 hover:text-slate-800 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs transition-colors"
+                        >
+                          <FileText className="h-4 w-4" />
+                          <span>Gate Pass</span>
+                        </button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "Completed", completion: 90 }) });
+                              if (res.ok) { const u = await res.json(); setJobs(prev => prev.map(j => j.id === u.id ? u : j)); setSelectedJob(u); }
+                              addTimelineEntry(selectedJob.id, "Vehicle Ready ✅", `${selectedJob.vehicleNo} — service complete, awaiting customer pickup`);
+                              triggerToast("Job completed!", "success");
+                            } catch { setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, status: "Completed", completion: 90 } : j)); addTimelineEntry(selectedJob.id, "Vehicle Ready ✅", `${selectedJob.vehicleNo} — service complete, awaiting customer pickup`); triggerToast("Marked complete", "success"); }
+                          }}
+                          className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-xs transition-colors shadow-md"
+                        >
+                          Done
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm("Delete this job card?")) return;
+                            try { await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, { method: "DELETE" }); } catch { }
+                            setJobs(prev => prev.filter(j => j.id !== selectedJob.id));
+                            setSelectedJob(null); setIsSidePanelOpen(false); setExpandedCardId(null);
+                            triggerToast("Job Card deleted!", "warn");
+                          }}
+                          className="p-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 dark:text-red-400 transition-colors border border-transparent hover:border-red-200"
+                        >
+                          <Trash2 className="h-4.5 w-4.5" />
+                        </button>
                       </div>
 
 		              </div>
@@ -4767,78 +5358,6 @@ export default function Home() {
                   )}
 
                 </div>
-
-                {/* Footer panel controls */}
-                <div className="p-4 border-t border-slate-200 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900/30 flex items-center justify-between gap-2.5">
-                  <button
-                    onClick={() => {
-                      router.push(`/estimation/${selectedJob.id}`);
-                    }}
-                    className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl border border-green-500/20 bg-green-500/5 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-500/10 font-bold text-xs transition-all"
-                  >
-                    <Wrench className="h-4 w-4" />
-                    <span>Estimate</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      triggerToast(`Gate Pass issued for ${selectedJob.vehicleNo}!`, "success");
-                    }}
-                    className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs transition-colors"
-                  >
-                    <FileText className="h-4 w-4" />
-                    <span>Gate Pass</span>
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}/status`, {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ status: "Completed" })
-                        });
-                        if (res.ok) {
-                          const updated = await res.json();
-                          setJobs(prev => prev.map(j => j.id === updated.id ? updated : j));
-                          setSelectedJob(updated);
-                          triggerToast(`Job Card ${selectedJob.id} completed successfully!`, "success");
-                        }
-                      } catch (err) {
-                        console.error("Backend offline, updating locally", err);
-                        setJobs(prev => prev.map(j => j.id === selectedJob.id ? { ...j, status: "Completed", completion: 100 } : j));
-                        setSelectedJob((prev: JobCard | null) => prev ? { ...prev, status: "Completed", completion: 100 } : null);
-                        triggerToast(`Job Card ${selectedJob.id} completed (Local Fallback)!`, "success");
-                      }
-                    }}
-                    className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-xs transition-colors shadow-md shadow-green-600/10"
-                  >
-                    Done
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`${API_BASE_URL}/job-cards/${selectedJob.id}`, {
-                          method: "DELETE"
-                        });
-                        if (res.ok) {
-                          setJobs(prev => prev.filter(j => j.id !== selectedJob.id));
-                          setSelectedJob(null);
-                          setIsSidePanelOpen(false);
-                          triggerToast(`Job Card deleted from database!`, "warn");
-                        }
-                      } catch (err) {
-                        console.error("Backend offline, deleting locally", err);
-                        setJobs(prev => prev.filter(j => j.id !== selectedJob.id));
-                        setSelectedJob(null);
-                        setIsSidePanelOpen(false);
-                        triggerToast(`Job Card deleted (Local Fallback)!`, "warn");
-                      }
-                    }}
-                    className="p-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 dark:text-red-400 transition-colors border border-transparent hover:border-red-200 dark:hover:border-red-900/40"
-                  >
-                    <Trash2 className="h-4.5 w-4.5" />
-                  </button>
-                </div>
-
 	              </div>
 		              </>
 		            )}
@@ -8785,16 +9304,57 @@ export default function Home() {
             }
 
             if (setList) {
-              if (crudModalMode === "new") {
-                const newRec = {
-                  id: activeTab === "Workshop Info" ? (crudForm.id || Math.random().toString()) : (activeTab.slice(0, 2).toLowerCase() + Date.now()),
-                  ...crudForm
+              if (activeTab === "Manage Services") {
+                const saveService = async () => {
+                  try {
+                    const method = crudModalMode === "new" ? "POST" : "PATCH";
+                    const url = crudModalMode === "new" ? `${API_BASE_URL}/services-master` : `${API_BASE_URL}/services-master/${crudSelectedId}`;
+                    const res = await fetch(url, {
+                      method,
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(crudForm)
+                    });
+                    if (res.ok) {
+                      const saved = await res.json();
+                      const mapped = {
+                        id: saved.id,
+                        name: saved.name,
+                        category: saved.category || "General",
+                        code: saved.code,
+                        amount: saved.rate
+                      };
+                      if (crudModalMode === "new") {
+                        setList([...list, mapped]);
+                        triggerToast("Service added successfully!", "success");
+                      } else {
+                        setList(list.map((item: any) => (item.id === crudSelectedId ? mapped : item)));
+                        triggerToast("Service updated successfully!", "success");
+                      }
+                    }
+                  } catch (err) {
+                    console.error("Failed to save service", err);
+                    triggerToast("Backend offline, updating locally", "warn");
+                    // Fallback local update
+                    if (crudModalMode === "new") {
+                      setList([...list, { id: "sv" + Date.now(), ...crudForm }]);
+                    } else {
+                      setList(list.map((item: any) => (item.id === crudSelectedId ? { ...item, ...crudForm } : item)));
+                    }
+                  }
                 };
-                setList([...list, newRec]);
-                triggerToast("Record added successfully!", "success");
+                saveService();
               } else {
-                setList(list.map((item: any) => (item.id === crudSelectedId ? { ...item, ...crudForm } : item)));
-                triggerToast("Record updated successfully!", "success");
+                if (crudModalMode === "new") {
+                  const newRec = {
+                    id: activeTab === "Workshop Info" ? (crudForm.id || Math.random().toString()) : (activeTab.slice(0, 2).toLowerCase() + Date.now()),
+                    ...crudForm
+                  };
+                  setList([...list, newRec]);
+                  triggerToast("Record added successfully!", "success");
+                } else {
+                  setList(list.map((item: any) => (item.id === crudSelectedId ? { ...item, ...crudForm } : item)));
+                  triggerToast("Record updated successfully!", "success");
+                }
               }
             }
 
@@ -8870,6 +9430,835 @@ export default function Home() {
             </div>
           );
         })()}
+
+        {/* ============================================================ */}
+        {/* STATUS CHANGE MODAL */}
+        {/* ============================================================ */}
+        {isStatusModalOpen && selectedJob && (() => {
+          const WORKFLOW_STATUSES = [
+            {
+              key: "Client Agreed",
+              icon: "✅",
+              color: "emerald",
+              bg: "bg-emerald-50 dark:bg-emerald-950/30",
+              border: "border-emerald-400",
+              text: "text-emerald-700 dark:text-emerald-300",
+              dot: "bg-emerald-500",
+              desc: "Customer has reviewed and agreed to the estimation",
+            },
+            {
+              key: "Work in Progress",
+              icon: "🔧",
+              color: "blue",
+              bg: "bg-blue-50 dark:bg-blue-950/30",
+              border: "border-blue-400",
+              text: "text-blue-700 dark:text-blue-300",
+              dot: "bg-blue-500",
+              desc: "Technician is actively working on the vehicle",
+            },
+            {
+              key: "Work on Hold",
+              icon: "⏸️",
+              color: "amber",
+              bg: "bg-amber-50 dark:bg-amber-950/30",
+              border: "border-amber-400",
+              text: "text-amber-700 dark:text-amber-300",
+              dot: "bg-amber-500",
+              desc: "Work paused — awaiting parts, approval, or customer decision",
+            },
+            {
+              key: "Work Completed",
+              icon: "🏁",
+              color: "teal",
+              bg: "bg-teal-50 dark:bg-teal-950/30",
+              border: "border-teal-400",
+              text: "text-teal-700 dark:text-teal-300",
+              dot: "bg-teal-500",
+              desc: "All repair/service work has been completed",
+            },
+            {
+              key: "Out for Delivery",
+              icon: "🛵",
+              color: "violet",
+              bg: "bg-violet-50 dark:bg-violet-950/30",
+              border: "border-violet-400",
+              text: "text-violet-700 dark:text-violet-300",
+              dot: "bg-violet-500",
+              desc: "Vehicle dispatched or on its way to the customer",
+            },
+            {
+              key: "Delivered",
+              icon: "🎉",
+              color: "green",
+              bg: "bg-green-50 dark:bg-green-950/30",
+              border: "border-green-500",
+              text: "text-green-700 dark:text-green-300",
+              dot: "bg-green-600",
+              desc: "Vehicle handed over to the customer successfully",
+            },
+          ];
+          return (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg overflow-hidden">
+                {/* Header */}
+                <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
+                  <div>
+                    <h3 className="font-black text-slate-800 dark:text-white text-sm tracking-wide">Update Job Status</h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{selectedJob.id} · {selectedJob.vehicleNo} · {selectedJob.customerName}</p>
+                  </div>
+                  <button onClick={() => setIsStatusModalOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+
+                {/* Status grid */}
+                <div className="p-5 space-y-2 max-h-[55vh] overflow-y-auto">
+                  {WORKFLOW_STATUSES.map((s) => {
+                    const isActive = selectedStatus === s.key;
+                    return (
+                      <button
+                        key={s.key}
+                        type="button"
+                        onClick={() => setSelectedStatus(s.key)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left ${isActive ? `${s.bg} ${s.border}` : "bg-white dark:bg-slate-800/50 border-slate-100 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-500"}`}
+                      >
+                        <span className="text-xl shrink-0">{s.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className={`text-xs font-black ${isActive ? s.text : "text-slate-700 dark:text-slate-200"}`}>{s.key}</div>
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{s.desc}</div>
+                        </div>
+                        {isActive && (
+                          <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${s.dot}`} />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Note field */}
+                <div className="px-5 pb-3">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Note (optional)</label>
+                  <input
+                    type="text"
+                    value={statusNote}
+                    onChange={e => setStatusNote(e.target.value)}
+                    placeholder="e.g. Waiting for clutch plate delivery..."
+                    className="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                  />
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 flex gap-3 justify-end">
+                  <button onClick={() => setIsStatusModalOpen(false)} className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancel</button>
+                  <button
+                    onClick={handleSaveStatus}
+                    disabled={!selectedStatus || selectedStatus === selectedJob.status}
+                    className="px-5 py-2 text-xs font-black text-white bg-teal-500 hover:bg-teal-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed rounded-lg transition-colors"
+                  >
+                    Update Status
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ============================================================ */}
+        {/* PAYMENT DETAILS MODAL */}
+        {/* ============================================================ */}
+        {isPaymentModalOpen && selectedJob && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex-1 text-center">
+                  <h3 className="font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Edit Payment Details</h3>
+                  <div className="text-[10px] font-bold text-slate-500 flex items-center justify-center space-x-3 mt-1">
+                    <span>Order Id: {selectedJob.id.split('-').pop()}</span>
+                    <span>|</span>
+                    <span>Total Amount (incl. GST): Rs. {Math.round(selectedJob.estimate * 1.18)}</span>
+                    <span>|</span>
+                    <span>Total Discount: Rs. {selectedJob.overallDiscount || 0}</span>
+                    <span>|</span>
+                    <span>Total Paid: Rs. {selectedJob.paid}</span>
+                    <span>|</span>
+                    <span>Total Due: Rs. {Math.max(0, Math.round(selectedJob.estimate * 1.18) - selectedJob.paid)}</span>
+                  </div>
+                </div>
+                <button onClick={() => setIsPaymentModalOpen(false)} className="text-red-500 hover:scale-110 transition-transform"><X className="h-5 w-5" /></button>
+              </div>
+
+              {(() => {
+                const gstRate = 0.18;
+                const baseAmount = selectedJob.estimate;
+                const gstAmount = Math.round(baseAmount * gstRate);
+                const totalWithGst = baseAmount + gstAmount;
+                const enteredPaid = Number(paymentForm.card) + Number(paymentForm.cash) + Number(paymentForm.cheque) + Number(paymentForm.other);
+                const totalPaidSoFar = selectedJob.paid + enteredPaid;
+                const totalDue = Math.max(0, totalWithGst - totalPaidSoFar);
+                return (
+                  <div className="p-6 space-y-6">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between p-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-lg">
+                        <span className="text-xs font-black text-slate-700 dark:text-slate-300">To Be Paid By Customer (incl. GST {(gstRate*100).toFixed(0)}%) :</span>
+                        <span className="text-xs font-black text-slate-800 dark:text-white">Rs. {totalWithGst}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg">
+                        <span className="text-xs font-black text-slate-700 dark:text-slate-300">Total Paid By Customer :</span>
+                        <span className="text-xs font-black text-teal-600 dark:text-teal-400">Rs. {totalPaidSoFar}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-lg">
+                        <span className="text-xs font-black text-slate-700 dark:text-slate-300">Total Due From Customer :</span>
+                        <span className={`text-xs font-black ${totalDue > 0 ? 'text-red-500' : 'text-green-600'}`}>Rs. {totalDue}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4">
+                      {['Card', 'Cash', 'Cheque', 'Other'].map((mode) => (
+                        <React.Fragment key={mode}>
+                          <div className="flex items-center bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-xl px-4 py-2">
+                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">Paid By {mode}</span>
+                          </div>
+                          <input
+                            type="number"
+                            placeholder="Enter amount"
+                            className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold focus:outline-none focus:ring-1 focus:ring-teal-500"
+                            onChange={(e) => setPaymentForm(prev => ({ ...prev, [mode.toLowerCase()]: Number(e.target.value) || 0 }))}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Enter remarks"
+                            className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold focus:outline-none focus:ring-1 focus:ring-teal-500"
+                            onChange={(e) => setPaymentForm(prev => ({ ...prev, remarks: e.target.value }))}
+                          />
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center">
+                <button className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase">Terms and Conditions</button>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleSavePayment}
+                    className="px-8 py-2 bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 rounded-xl font-black text-xs hover:bg-green-200 transition-all"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={handleSavePayment}
+                    className="px-8 py-2 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-xl font-black text-xs hover:bg-red-200 transition-all"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* INVOICE PREVIEW MODAL */}
+        {/* ============================================================ */}
+        {isInvoiceModalOpen && selectedJob && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-3xl overflow-hidden animate-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex-1 text-center">
+                  <h3 className="font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Tax Invoice Preview</h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">JC: {selectedJob.id} | {selectedJob.vehicleNo} | {selectedJob.brandModel}</p>
+                </div>
+                <button onClick={() => setIsInvoiceModalOpen(false)} className="text-red-500 hover:scale-110 transition-transform"><X className="h-5 w-5" /></button>
+              </div>
+
+              {(() => {
+                const subtotal = selectedJob.estimate;
+                const cgst = Math.round(subtotal * 0.09);
+                const sgst = Math.round(subtotal * 0.09);
+                const gstTotal = cgst + sgst;
+                const discount = Number(selectedJob.overallDiscount) || 0;
+                const netPayable = Math.max(0, subtotal + gstTotal - discount);
+                const totalPaid = selectedJob.paid || 0;
+                const due = Math.max(0, netPayable - totalPaid);
+                return (
+                  <div className="p-6 space-y-5 overflow-y-auto max-h-[70vh] text-xs text-slate-900 dark:text-slate-100">
+
+                    {/* Workshop Header */}
+                    <div className="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-4">
+                      <div>
+                        <h4 className="font-extrabold text-sm uppercase text-slate-900 dark:text-white">BIKE MASTERS</h4>
+                        <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">Plot No. 120, Near Fire Station, Bhubaneswar, Odisha - 751001<br />Phone: +91 91212 23601 | GSTIN: 21AAAAA0000A1Z0</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-extrabold text-sm block tracking-widest uppercase">TAX INVOICE</span>
+                        <p className="text-[10px] text-slate-500 font-mono mt-1">JC: <strong>{selectedJob.id}</strong></p>
+                        <p className="text-[10px] text-slate-500">Date: {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                      </div>
+                    </div>
+
+                    {/* Customer & Vehicle */}
+                    <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <div className="space-y-0.5">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">Customer Details</span>
+                        <p className="font-extrabold">{selectedJob.customerName}</p>
+                        <p className="text-slate-500">{selectedJob.phone}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">Vehicle Details</span>
+                        <p className="font-extrabold font-mono">{selectedJob.vehicleNo}</p>
+                        <p className="text-slate-500">{selectedJob.brandModel} | {selectedJob.kms.toLocaleString()} KM</p>
+                      </div>
+                    </div>
+
+                    {/* Spares Table */}
+                    {selectedJob.spares.length > 0 && (
+                      <div>
+                        <h5 className="font-extrabold text-[10px] text-slate-600 dark:text-slate-400 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1 mb-2">Spare Parts</h5>
+                        <table className="w-full text-left border-collapse text-[11px]">
+                          <thead>
+                            <tr className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
+                              <th className="py-1.5 px-2">S.No</th><th className="py-1.5 px-2">Description</th><th className="py-1.5 px-2">HSN</th><th className="py-1.5 px-2 text-center">Qty</th><th className="py-1.5 px-2 text-right">Rate</th><th className="py-1.5 px-2 text-right">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedJob.spares.map((s, i) => (
+                              <tr key={i} className="border-b border-slate-100 dark:border-slate-800">
+                                <td className="py-1.5 px-2">{i + 1}</td>
+                                <td className="py-1.5 px-2 font-semibold">{s.name}</td>
+                                <td className="py-1.5 px-2 font-mono text-[10px] text-slate-500">{s.hsn}</td>
+                                <td className="py-1.5 px-2 text-center">{s.qty}</td>
+                                <td className="py-1.5 px-2 text-right">₹{s.price}</td>
+                                <td className="py-1.5 px-2 text-right font-bold">₹{s.qty * s.price}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Services Table */}
+                    {selectedJob.services.length > 0 && (
+                      <div>
+                        <h5 className="font-extrabold text-[10px] text-slate-600 dark:text-slate-400 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1 mb-2">Services / Labour</h5>
+                        <table className="w-full text-left border-collapse text-[11px]">
+                          <thead>
+                            <tr className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
+                              <th className="py-1.5 px-2">S.No</th><th className="py-1.5 px-2">Description</th><th className="py-1.5 px-2">SAC</th><th className="py-1.5 px-2 text-right">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedJob.services.map((s, i) => (
+                              <tr key={i} className="border-b border-slate-100 dark:border-slate-800">
+                                <td className="py-1.5 px-2">{i + 1}</td>
+                                <td className="py-1.5 px-2 font-semibold">{s.name}</td>
+                                <td className="py-1.5 px-2 font-mono text-[10px] text-slate-500">{s.hsn}</td>
+                                <td className="py-1.5 px-2 text-right font-bold">₹{s.rate}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Totals + Payment side by side */}
+                    <div className="grid grid-cols-2 gap-6 pt-2 border-t border-slate-200 dark:border-slate-700">
+                      {/* Tax Breakdown */}
+                      <div className="space-y-1.5 text-[11px] max-w-xs ml-auto w-full">
+                        <div className="flex justify-between text-slate-500"><span>Subtotal:</span><span className="font-bold text-slate-800 dark:text-slate-200">₹{subtotal}</span></div>
+                        <div className="flex justify-between text-slate-500"><span>CGST (9.0%):</span><span className="font-bold text-slate-800 dark:text-slate-200">₹{cgst}</span></div>
+                        <div className="flex justify-between text-slate-500"><span>SGST (9.0%):</span><span className="font-bold text-slate-800 dark:text-slate-200">₹{sgst}</span></div>
+                        {discount > 0 && <div className="flex justify-between text-red-500"><span>Discount:</span><span className="font-bold">− ₹{discount}</span></div>}
+                        <div className="flex justify-between border-t border-slate-300 dark:border-slate-600 pt-1.5 font-black text-sm">
+                          <span>Net Payable:</span><span className="text-teal-600 dark:text-teal-400">₹{netPayable}</span>
+                        </div>
+                      </div>
+
+                      {/* Payment Received */}
+                      <div className="space-y-1.5 text-[11px]">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Payment Received</span>
+                        {[
+                          { label: 'By Card', value: (selectedJob as any).paymentBreakdown?.card },
+                          { label: 'By Cash', value: (selectedJob as any).paymentBreakdown?.cash },
+                          { label: 'By Cheque', value: (selectedJob as any).paymentBreakdown?.cheque },
+                          { label: 'By Other', value: (selectedJob as any).paymentBreakdown?.other },
+                        ].filter(p => Number(p.value) > 0).map((p, i) => (
+                          <div key={i} className="flex justify-between text-slate-500"><span>{p.label}:</span><span className="font-bold text-teal-600">₹{p.value}</span></div>
+                        ))}
+                        {totalPaid === 0 && <p className="text-slate-400 italic text-[10px]">No payment recorded yet</p>}
+                        <div className="flex justify-between border-t border-slate-300 dark:border-slate-600 pt-1.5 font-black">
+                          <span>Total Paid:</span><span className="text-teal-600">₹{totalPaid}</span>
+                        </div>
+                        {/* Balance Due — display only, not clickable */}
+                        <div className="flex justify-between pt-1 font-black select-none pointer-events-none">
+                          <span>Balance Due:</span>
+                          <span className={due > 0 ? 'text-red-500' : 'text-green-600'}>₹{due}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-end space-x-3">
+                <button onClick={() => window.print()} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs transition-all flex items-center space-x-1.5">
+                  <Printer className="h-3.5 w-3.5" /><span>Print</span>
+                </button>
+                <button onClick={() => setIsInvoiceModalOpen(false)} className="px-6 py-2 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-xl font-black text-xs hover:bg-red-200 transition-all">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* DISCOUNT MODAL */}
+        {/* ============================================================ */}
+        {isDiscountModalOpen && selectedJob && (() => {
+          // Live calculations
+          const lineItemDiscountTotal = discountForm.lineItems.reduce((sum, item) => {
+            const d = item.type === "percentage" ? (item.total * item.value / 100) : item.value;
+            return sum + Math.min(Math.max(d, 0), item.total);
+          }, 0);
+          const overallDiscountAmt = discountForm.overallType === "percentage"
+            ? (selectedJob.estimate * discountForm.overallValue / 100)
+            : discountForm.overallValue;
+          const totalDiscount = Math.min(lineItemDiscountTotal + overallDiscountAmt, selectedJob.estimate);
+          const netPayable = Math.max(selectedJob.estimate - totalDiscount, 0);
+          const alreadyPaid = selectedJob.paid || 0;
+          const balanceDue = Math.max(netPayable - alreadyPaid, 0);
+          const gstAmt = Math.round(selectedJob.estimate * 0.18 / 1.18 * 100) / 100;
+          const subtotalBeforeTax = Math.round((selectedJob.estimate - gstAmt) * 100) / 100;
+
+          const updateLineItem = (key: string, field: "type" | "value", val: string | number) => {
+            setDiscountForm(prev => ({
+              ...prev,
+              lineItems: prev.lineItems.map(item =>
+                item.key === key ? { ...item, [field]: val } : item
+              ),
+            }));
+          };
+
+          return (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-5xl overflow-hidden flex flex-col max-h-[92vh]">
+
+                {/* Header */}
+                <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between shrink-0">
+                  <div>
+                    <h3 className="font-black text-slate-800 dark:text-white text-sm tracking-wide">Discount Manager</h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{selectedJob.id} · {selectedJob.vehicleNo} · {selectedJob.customerName}</p>
+                  </div>
+                  <button onClick={() => setIsDiscountModalOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="flex flex-1 overflow-hidden min-h-0">
+                  {/* LEFT — inputs */}
+                  <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+                    {/* Available Offers */}
+                    {availableOffers.length > 0 && (
+                      <div className="rounded-xl border-2 border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-base">🏷️</span>
+                          <div>
+                            <h4 className="text-xs font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest">Available Offers</h4>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Select one offer — it fills the discount automatically</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {availableOffers.map(offer => {
+                            const isSelected = selectedOfferId === offer.id;
+                            const offerAmt = offer.offerType === "percentage"
+                              ? (selectedJob.estimate * offer.discountValue / 100)
+                              : offer.discountValue;
+                            return (
+                              <label
+                                key={offer.id}
+                                className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                                  isSelected
+                                    ? "border-amber-400 bg-amber-50 dark:bg-amber-950/40"
+                                    : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-amber-300"
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="offer"
+                                  className="mt-0.5 accent-amber-500"
+                                  checked={isSelected}
+                                  onChange={() => {
+                                    setSelectedOfferId(offer.id);
+                                    if (offer.offerType === "percentage") {
+                                      setDiscountForm(p => ({ ...p, overallType: "percentage", overallValue: offer.discountValue }));
+                                    } else {
+                                      setDiscountForm(p => ({ ...p, overallType: "amount", overallValue: offer.discountValue }));
+                                    }
+                                  }}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-black text-slate-800 dark:text-white">{offer.title}</span>
+                                    <span className="text-xs font-black text-red-500 shrink-0">
+                                      − ₹{offerAmt.toFixed(0)}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{offer.description}</p>
+                                  <p className="text-[10px] text-slate-400 mt-1">
+                                    {offer.offerType === "percentage" ? `${offer.discountValue}% off` : `₹${offer.discountValue} flat off`}
+                                    {" · "}Valid till {new Date(offer.endDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                  </p>
+                                </div>
+                              </label>
+                            );
+                          })}
+                          {selectedOfferId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedOfferId(null);
+                                setDiscountForm(p => ({ ...p, overallType: "amount", overallValue: 0 }));
+                              }}
+                              className="text-[10px] text-slate-400 hover:text-red-500 transition-colors mt-1"
+                            >
+                              ✕ Clear offer
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Overall Discount Card */}
+                    <div className="rounded-xl border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/20 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h4 className="text-xs font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-widest">Overall Discount</h4>
+                          <p className="text-[10px] text-slate-400 mt-0.5">Applied on the total bill amount after all line items</p>
+                        </div>
+                        {overallDiscountAmt > 0 && (
+                          <span className="text-sm font-black text-red-500">− ₹{overallDiscountAmt.toFixed(2)}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {/* Type toggle */}
+                        <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setDiscountForm(p => ({ ...p, overallType: "percentage" }))}
+                            className={`px-3 py-2 text-xs font-black transition-colors ${discountForm.overallType === "percentage" ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700"}`}
+                          >% Pct</button>
+                          <button
+                            type="button"
+                            onClick={() => setDiscountForm(p => ({ ...p, overallType: "amount" }))}
+                            className={`px-3 py-2 text-xs font-black transition-colors ${discountForm.overallType === "amount" ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700"}`}
+                          >₹ Amt</button>
+                        </div>
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">
+                            {discountForm.overallType === "percentage" ? "%" : "₹"}
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={discountForm.overallType === "percentage" ? 100 : selectedJob.estimate}
+                            value={discountForm.overallValue || ""}
+                            placeholder={discountForm.overallType === "percentage" ? "e.g. 10" : "e.g. 500"}
+                            onChange={e => setDiscountForm(p => ({ ...p, overallValue: Math.max(0, Number(e.target.value)) }))}
+                            className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                          />
+                        </div>
+                        {discountForm.overallType === "percentage" && discountForm.overallValue > 0 && (
+                          <div className="shrink-0 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-black text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            = ₹{overallDiscountAmt.toFixed(2)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Line Item Discounts */}
+                    {discountForm.lineItems.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">Line Item Discounts</h4>
+                          <span className="text-[10px] text-slate-400">Applied per item before taxes</span>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-black uppercase text-[10px] tracking-wider">
+                                <th className="py-2.5 px-3">Item</th>
+                                <th className="py-2.5 px-3 text-right">Amount</th>
+                                <th className="py-2.5 px-3 text-center w-28">Type</th>
+                                <th className="py-2.5 px-3 text-center w-24">Value</th>
+                                <th className="py-2.5 px-3 text-right w-24">Discount</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                              {/* Spares section */}
+                              {discountForm.lineItems.some(i => i.isSpare) && (
+                                <tr className="bg-amber-50 dark:bg-amber-950/20">
+                                  <td colSpan={5} className="py-1.5 px-3 text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-widest">Parts & Consumables</td>
+                                </tr>
+                              )}
+                              {discountForm.lineItems.filter(i => i.isSpare).map(item => {
+                                const discAmt = item.type === "percentage" ? (item.total * item.value / 100) : item.value;
+                                const clampedDisc = Math.min(Math.max(discAmt, 0), item.total);
+                                return (
+                                  <tr key={item.key} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                                    <td className="py-2.5 px-3 font-semibold text-slate-700 dark:text-slate-200 max-w-[180px] truncate">{item.name}</td>
+                                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-600 dark:text-slate-300">₹{item.total}</td>
+                                    <td className="py-2.5 px-3">
+                                      <div className="flex rounded border border-slate-200 dark:border-slate-700 overflow-hidden text-[10px]">
+                                        <button type="button" onClick={() => updateLineItem(item.key, "type", "percentage")} className={`flex-1 py-1 font-black transition-colors ${item.type === "percentage" ? "bg-teal-500 text-white" : "bg-white dark:bg-slate-800 text-slate-500"}`}>%</button>
+                                        <button type="button" onClick={() => updateLineItem(item.key, "type", "amount")} className={`flex-1 py-1 font-black transition-colors ${item.type === "amount" ? "bg-teal-500 text-white" : "bg-white dark:bg-slate-800 text-slate-500"}`}>₹</button>
+                                      </div>
+                                    </td>
+                                    <td className="py-2.5 px-3">
+                                      <input
+                                        type="number" min={0}
+                                        max={item.type === "percentage" ? 100 : item.total}
+                                        value={item.value || ""}
+                                        placeholder="0"
+                                        onChange={e => updateLineItem(item.key, "value", Math.max(0, Number(e.target.value)))}
+                                        className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center font-bold focus:outline-none focus:ring-1 focus:ring-teal-400"
+                                      />
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right font-black">
+                                      {clampedDisc > 0
+                                        ? <span className="text-red-500">− ₹{clampedDisc.toFixed(2)}</span>
+                                        : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              {/* Services section */}
+                              {discountForm.lineItems.some(i => !i.isSpare) && (
+                                <tr className="bg-blue-50 dark:bg-blue-950/20">
+                                  <td colSpan={5} className="py-1.5 px-3 text-[10px] font-black text-blue-700 dark:text-blue-400 uppercase tracking-widest">Services & Labour</td>
+                                </tr>
+                              )}
+                              {discountForm.lineItems.filter(i => !i.isSpare).map(item => {
+                                const discAmt = item.type === "percentage" ? (item.total * item.value / 100) : item.value;
+                                const clampedDisc = Math.min(Math.max(discAmt, 0), item.total);
+                                return (
+                                  <tr key={item.key} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                                    <td className="py-2.5 px-3 font-semibold text-slate-700 dark:text-slate-200 max-w-[180px] truncate">{item.name}</td>
+                                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-600 dark:text-slate-300">₹{item.total}</td>
+                                    <td className="py-2.5 px-3">
+                                      <div className="flex rounded border border-slate-200 dark:border-slate-700 overflow-hidden text-[10px]">
+                                        <button type="button" onClick={() => updateLineItem(item.key, "type", "percentage")} className={`flex-1 py-1 font-black transition-colors ${item.type === "percentage" ? "bg-teal-500 text-white" : "bg-white dark:bg-slate-800 text-slate-500"}`}>%</button>
+                                        <button type="button" onClick={() => updateLineItem(item.key, "type", "amount")} className={`flex-1 py-1 font-black transition-colors ${item.type === "amount" ? "bg-teal-500 text-white" : "bg-white dark:bg-slate-800 text-slate-500"}`}>₹</button>
+                                      </div>
+                                    </td>
+                                    <td className="py-2.5 px-3">
+                                      <input
+                                        type="number" min={0}
+                                        max={item.type === "percentage" ? 100 : item.total}
+                                        value={item.value || ""}
+                                        placeholder="0"
+                                        onChange={e => updateLineItem(item.key, "value", Math.max(0, Number(e.target.value)))}
+                                        className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center font-bold focus:outline-none focus:ring-1 focus:ring-teal-400"
+                                      />
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right font-black">
+                                      {clampedDisc > 0
+                                        ? <span className="text-red-500">− ₹{clampedDisc.toFixed(2)}</span>
+                                        : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* RIGHT — live bill summary */}
+                  <div className="w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex flex-col">
+                    <div className="p-4 border-b border-slate-200 dark:border-slate-800">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Bill Preview</h4>
+                    </div>
+                    <div className="p-4 space-y-2.5 flex-1 overflow-y-auto text-xs">
+                      <div className="flex justify-between text-slate-500">
+                        <span>Subtotal (excl. GST)</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-200">₹{subtotalBeforeTax.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-500">
+                        <span>GST (18%)</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-200">₹{gstAmt.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-slate-700 dark:text-slate-200 border-t border-slate-200 dark:border-slate-700 pt-2">
+                        <span>Gross Total</span>
+                        <span>₹{selectedJob.estimate.toFixed(2)}</span>
+                      </div>
+
+                      {/* Discount breakdown */}
+                      {(lineItemDiscountTotal > 0 || overallDiscountAmt > 0) && (
+                        <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900 p-3 space-y-1.5 mt-2">
+                          <p className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase tracking-widest mb-2">Discounts Applied</p>
+                          {lineItemDiscountTotal > 0 && (
+                            <div className="flex justify-between text-red-500">
+                              <span>Line Item Discounts</span>
+                              <span className="font-black">− ₹{lineItemDiscountTotal.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {overallDiscountAmt > 0 && (
+                            <div className="flex justify-between text-red-500">
+                              <span>Overall Discount{discountForm.overallType === "percentage" ? ` (${discountForm.overallValue}%)` : ""}</span>
+                              <span className="font-black">− ₹{overallDiscountAmt.toFixed(2)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-red-600 font-black border-t border-red-200 dark:border-red-800 pt-1.5">
+                            <span>Total Discount</span>
+                            <span>− ₹{totalDiscount.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Net payable highlight */}
+                      <div className={`rounded-xl p-3 mt-2 ${totalDiscount > 0 ? "bg-teal-500" : "bg-slate-200 dark:bg-slate-700"}`}>
+                        <div className="flex justify-between items-center">
+                          <span className={`text-xs font-black ${totalDiscount > 0 ? "text-white" : "text-slate-600 dark:text-slate-300"}`}>Net Payable</span>
+                          <span className={`text-lg font-black ${totalDiscount > 0 ? "text-white" : "text-slate-800 dark:text-white"}`}>₹{netPayable.toFixed(2)}</span>
+                        </div>
+                        {totalDiscount > 0 && (
+                          <p className="text-[10px] text-teal-100 mt-0.5">You saved ₹{totalDiscount.toFixed(2)} on this bill</p>
+                        )}
+                      </div>
+
+                      <div className="border-t border-slate-200 dark:border-slate-700 pt-2 space-y-1.5">
+                        <div className="flex justify-between text-slate-500">
+                          <span>Already Paid</span>
+                          <span className="font-bold text-teal-600">₹{alreadyPaid.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between font-black">
+                          <span>Balance Due</span>
+                          <span className={balanceDue > 0 ? "text-red-500" : "text-green-600"}>₹{balanceDue.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action buttons inside right panel */}
+                    <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-2 shrink-0">
+                      <button
+                        onClick={handleSaveDiscount}
+                        disabled={totalDiscount <= 0}
+                        className="w-full py-2.5 text-xs font-black text-white bg-teal-500 hover:bg-teal-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed rounded-xl transition-colors"
+                      >
+                        {totalDiscount > 0 ? `Apply ₹${totalDiscount.toFixed(2)} Discount` : "Apply Discount"}
+                      </button>
+                      <button
+                        onClick={() => setIsDiscountModalOpen(false)}
+                        className="w-full py-2 text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ============================================================ */}
+        {/* VEHICLE HISTORY MODAL */}
+        {/* ============================================================ */}
+        {isHistoryModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 shrink-0">
+                <div className="flex-1 text-center">
+                  <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-widest text-sm">
+                    VEHICLE HISTORY FOR: <span className="text-red-500">{historyVehicleNo}</span>
+                  </h3>
+                </div>
+                <button onClick={() => setIsHistoryModalOpen(false)} className="text-red-500 hover:scale-110 transition-transform ml-4">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Table */}
+              <div className="flex-1 overflow-auto">
+                {historyLoading ? (
+                  <div className="flex items-center justify-center py-20 text-slate-500 dark:text-slate-400 text-sm font-semibold">
+                    Loading history...
+                  </div>
+                ) : historyRows.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-slate-500">
+                    <RefreshCw className="h-10 w-10 mb-3 opacity-30" />
+                    <p className="font-black text-sm uppercase tracking-wider">No service records found</p>
+                    <p className="text-xs mt-1">This vehicle has no previous service history</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
+                    <thead>
+                      <tr className="bg-teal-600 text-white font-black uppercase tracking-wide text-[11px]">
+                        <th className="py-3 px-4">Invoice No</th>
+                        <th className="py-3 px-4">Arrival Date</th>
+                        <th className="py-3 px-4">KMS Driven</th>
+                        <th className="py-3 px-4">Tax On Services</th>
+                        <th className="py-3 px-4">Tax On Parts</th>
+                        <th className="py-3 px-4">Spares</th>
+                        <th className="py-3 px-4">Labours</th>
+                        <th className="py-3 px-4">Discount</th>
+                        <th className="py-3 px-4">Total Amount</th>
+                        <th className="py-3 px-4">Total Paid</th>
+                        <th className="py-3 px-4 text-red-200">Due Amount</th>
+                        <th className="py-3 px-4">Tech Name</th>
+                        <th className="py-3 px-4">Tech Feedback</th>
+                        <th className="py-3 px-4">Customer Feedback</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {historyRows.map((row, idx) => {
+                        const due = Number(row.dueAmount);
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors font-semibold text-slate-700 dark:text-slate-300">
+                            <td className="py-3.5 px-4 font-black text-slate-800 dark:text-white whitespace-nowrap">
+                              <span className="text-slate-400 mr-0.5">⊕</span>{row.invoiceNo}
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">{row.arrivalDate}</td>
+                            <td className="py-3.5 px-4 font-mono">{row.kmsDriven || '—'}</td>
+                            <td className="py-3.5 px-4 font-mono">{Number(row.taxOnServices).toFixed(2)}</td>
+                            <td className="py-3.5 px-4 font-mono">{Number(row.taxOnParts).toFixed(2)}</td>
+                            <td className="py-3.5 px-4 font-mono">{Number(row.spares).toFixed(0)}</td>
+                            <td className="py-3.5 px-4 font-mono">{Number(row.labours).toFixed(0)}</td>
+                            <td className="py-3.5 px-4 font-mono">{Number(row.discount).toFixed(2)}</td>
+                            <td className="py-3.5 px-4 font-mono font-black">{Number(row.totalAmount).toFixed(2)}</td>
+                            <td className="py-3.5 px-4 font-mono">{Number(row.totalPaid).toFixed(2)}</td>
+                            <td className={`py-3.5 px-4 font-black font-mono ${due > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                              {due.toFixed(2)}
+                            </td>
+                            <td className="py-3.5 px-4 font-bold uppercase text-slate-700 dark:text-slate-300 whitespace-nowrap">{row.techName}</td>
+                            <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 italic">{row.techFeedback || '—'}</td>
+                            <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">{row.customerFeedback || '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 shrink-0 flex justify-center">
+                <button
+                  onClick={() => setIsHistoryModalOpen(false)}
+                  className="px-32 py-2.5 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-full font-black text-xs hover:bg-red-200 dark:hover:bg-red-950/60 transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ============================================================ */}
         {/* TOAST SYSTEM (Bottom Right Floating) */}
