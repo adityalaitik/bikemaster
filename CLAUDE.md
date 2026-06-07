@@ -53,6 +53,22 @@ npm run dev          # Watch mode
 
 To run commands for a specific app from the root: `npm run dev --workspace=apps/api`
 
+## Git Workflow
+
+`main` is protected — never commit directly to it. Always use a feature branch and PR.
+
+```bash
+# Start new work
+git checkout -b feat/short-description   # or fix/short-description
+
+# When done
+git push -u origin feat/short-description
+gh pr create --fill
+gh pr merge --squash --delete-branch
+```
+
+Branch naming: `feat/<topic>`, `fix/<topic>`, `chore/<topic>`.
+
 ## Architecture
 
 ### Data Flow
