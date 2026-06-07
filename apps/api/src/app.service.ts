@@ -792,12 +792,20 @@ export class AppService {
       'Insurance Claim': 'insurance_claim', 'Free Service': 'free_service',
     };
 
+    // Resolve advisor by name within this garage
+    let serviceAdvisorId: string | null = null;
+    if (data.advisor) {
+      const emp = await this.employeeRepo.findOneBy({ name: data.advisor, garageId: resolvedGarageId, isActive: true });
+      if (emp) serviceAdvisorId = emp.id;
+    }
+
     const saved = await this.jobCardRepo.save(this.jobCardRepo.create({
       jobCardNo, garageId: resolvedGarageId, vehicleId: vehicle.id, customerId: customer.id,
       odometerIn: data.kms || 0, status: 'under_servicing',
       serviceType: serviceTypeMap[data.serviceType] || 'regular',
       customerComplaints: JSON.stringify(data.complaints || []),
       completion: 10, isEstimated: false, isStatusFilled: false, overallDiscount: 0,
+      ...(serviceAdvisorId ? { serviceAdvisorId } : {}),
     }));
 
     return this.getJobCardById(saved.jobCardNo);
@@ -1131,6 +1139,47 @@ export class AppService {
   }
 
   // ── Vehicle Search (typeahead) ────────────────────────────────────────────
+  async searchCustomersByPhone(phone: string, garageId?: string) {
+    if (!phone || phone.length < 3) return [];
+    const qb = this.customerRepo
+      .createQueryBuilder('c')
+      .where('c.phone LIKE :phone', { phone: `%${phone}%` });
+    if (garageId) qb.andWhere('c.garageId = :garageId', { garageId });
+    const customers = await qb.limit(8).getMany();
+
+    const result: any[] = [];
+    for (const c of customers) {
+      // Get the most recent job card for this customer to find their vehicle
+      const latestJc = await this.jobCardRepo
+        .createQueryBuilder('jc')
+        .where('jc.customerId = :cid', { cid: c.id })
+        .orderBy('jc.createdAt', 'DESC')
+        .getOne();
+      let brand = '', model = '', variant = '', plateColor = 'white', chassisNo = '', engineNo = '', regDate = '', mfgYear = '', regNo = '';
+      if (latestJc?.vehicleId) {
+        const vehicle = await this.vehicleRepo.findOneBy({ id: latestJc.vehicleId });
+        if (vehicle) {
+          regNo = vehicle.registrationNo;
+          plateColor = vehicle.numberPlateColor || 'white';
+          chassisNo = vehicle.chassisNo || '';
+          engineNo = vehicle.engineNo || '';
+          regDate = vehicle.dateOfRegistration ? vehicle.dateOfRegistration.toString().split('T')[0] : '';
+          mfgYear = vehicle.mfgYear ? String(vehicle.mfgYear) : '';
+          const vehicleModel = vehicle.modelId ? await this.modelRepo.findOneBy({ id: vehicle.modelId }) : null;
+          const vehicleBrand = vehicleModel ? await this.brandRepo.findOneBy({ id: vehicleModel.brandId }) : null;
+          brand = vehicleBrand?.name || '';
+          model = vehicleModel?.name || '';
+        }
+      }
+      result.push({
+        id: c.id, name: c.name, phone: c.phone,
+        altPhone: c.alternatePhone || '', email: c.email || '', address: c.address || '',
+        regNo, brand, model, variant, plateColor, chassisNo, engineNo, regDate, mfgYear,
+      });
+    }
+    return result;
+  }
+
   async searchVehicles(q: string) {
     if (!q || q.length < 2) return [];
     const rows = await this.vehicleRepo
@@ -1145,7 +1194,7 @@ export class AppService {
       // Get customer info from the most recent job card for this vehicle
       const latestJc = await this.jobCardRepo
         .createQueryBuilder('jc')
-        .where('jc.vehicleNo = :vno', { vno: v.registrationNo })
+        .where('jc.vehicleId = :vid', { vid: v.id })
         .orderBy('jc.createdAt', 'DESC')
         .getOne();
       const customer = latestJc ? await this.customerRepo.findOneBy({ id: latestJc.customerId }) : null;

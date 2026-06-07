@@ -378,12 +378,15 @@ export default function Home() {
   const [theme, setTheme] = useState("light");
   const [mounted, setMounted] = useState(false);
 
-  // Read theme from localStorage on initial client mount
+  // Read theme + session from localStorage on initial client mount
   useEffect(() => {
     setMounted(true);
     const savedTheme = localStorage.getItem("theme");
-    if (savedTheme) {
-      setTheme(savedTheme);
+    if (savedTheme) setTheme(savedTheme);
+    const session = readSession();
+    if (session) {
+      setCurrentUser(session);
+      setIsLoggedIn(true);
     }
   }, []);
 
@@ -419,14 +422,16 @@ export default function Home() {
     return null;
   };
 
-  // Authentication states
-  const [isLoggedIn, setIsLoggedIn] = useState(() => !!readSession());
+  // Authentication states — always start false/null so server and client render the same
+  // initial HTML (avoids hydration mismatch). Session is restored from localStorage in
+  // the mount useEffect below.
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [currentUser, setCurrentUser] = useState<{
     id: string; name: string; username: string; role: string;
     garageCode: string; garageId: string; garageName?: string; token: string;
-  } | null>(readSession);
+  } | null>(null);
 
   // Branch picker state — shown when a multi-branch user logs in
   const [pendingBranchUser, setPendingBranchUser] = useState<{
@@ -1085,6 +1090,20 @@ export default function Home() {
       address: employeeForm.address
     };
     setEmployees(prev => [...prev, newEmp]);
+
+    // If opened from the registration form, update the supervisor/technician dropdowns
+    if (employeeOpenedFrom === "registration") {
+      const fullName = `${newEmp.firstName} ${newEmp.lastName}`.trim();
+      if (employeeRoleType === "technician") {
+        setTechniciansList(prev => [...prev, fullName]);
+        setNewCustomerForm(prev => ({ ...prev, technician: fullName }));
+      } else {
+        setSupervisorsList(prev => [...prev, fullName]);
+        setNewCustomerForm(prev => ({ ...prev, supervisor: fullName }));
+      }
+      setEmployeeOpenedFrom("manage");
+    }
+
     setEmployeeForm({
       workshopId: "Bike Masters", firstName: "", lastName: "", username: "", email: "", contact: "", designation: "Technician", pwdExpiry: "2027-12-31", dob: "", anniversary: "", address: ""
     });
@@ -1344,7 +1363,7 @@ export default function Home() {
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        const res = await apiFetch(`/job-cards?status=${activeFilter}&search=${searchQuery}`);
+        const res = await apiFetch(`/job-cards${searchQuery ? `?search=${searchQuery}` : ''}`);
         if (res.ok) {
           const data = await res.json();
           setJobs(data);
@@ -1361,7 +1380,7 @@ export default function Home() {
       }
     };
     fetchJobs();
-  }, [activeFilter, searchQuery, currentUser?.garageId]);
+  }, [searchQuery, currentUser?.garageId]);
 
   // Load employees from Backend dynamically (branch-aware)
   useEffect(() => {
@@ -1642,6 +1661,8 @@ export default function Home() {
   const [isNewSourceModalOpen, setIsNewSourceModalOpen] = useState(false);
   const [isNewEmployeeModalOpen, setIsNewEmployeeModalOpen] = useState(false);
   const [employeeRoleType, setEmployeeRoleType] = useState<"technician" | "supervisor">("technician");
+  // tracks whether the employee modal was opened from the registration form
+  const [employeeOpenedFrom, setEmployeeOpenedFrom] = useState<"manage" | "registration">("manage");
   const [isPlateInfoModalOpen, setIsPlateInfoModalOpen] = useState(false);
 
   // Success screen overlay state
@@ -1718,6 +1739,55 @@ export default function Home() {
     triggerToast(`Selected ${brand} ${model}! Auto-populated fields.`, "success");
   };
 
+  // Phone autocomplete — search existing customers by partial phone
+  const [phoneMatches, setPhoneMatches] = useState<any[]>([]);
+  const [showPhoneSuggestions, setShowPhoneSuggestions] = useState(false);
+  // Once a customer is selected from either autocomplete, stop firing search calls
+  const [customerPrefilled, setCustomerPrefilled] = useState(false);
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setNewCustomerForm(prev => ({ ...prev, phone: val }));
+    if (customerPrefilled) return;
+    const digits = val.replace(/\D/g, '');
+    if (digits.length >= 3) {
+      apiFetch(`/customers/search?phone=${encodeURIComponent(val)}`)
+        .then(r => r.ok ? r.json() : [])
+        .then((results: any[]) => {
+          setPhoneMatches(results);
+          setShowPhoneSuggestions(results.length > 0);
+        })
+        .catch(() => setShowPhoneSuggestions(false));
+    } else {
+      setPhoneMatches([]);
+      setShowPhoneSuggestions(false);
+    }
+  };
+
+  const selectPhoneMatch = (c: any) => {
+    setNewCustomerForm(prev => ({
+      ...prev,
+      name: c.name || prev.name,
+      phone: c.phone || prev.phone,
+      altPhone: c.altPhone || prev.altPhone,
+      email: c.email || prev.email,
+      address: c.address || prev.address,
+      regNo: c.regNo || prev.regNo,
+      brand: c.brand || prev.brand,
+      model: c.model || prev.model,
+      variant: c.variant || prev.variant,
+      plateColor: c.plateColor || prev.plateColor,
+      chassisNo: c.chassisNo || prev.chassisNo,
+      engineNo: c.engineNo || prev.engineNo,
+      regDate: c.regDate || prev.regDate,
+      mfgYear: c.mfgYear || prev.mfgYear,
+    }));
+    if (c.brand && c.model) setVehicleSearchText(`${c.brand} ${c.model}${c.variant ? ` - ${c.variant}` : ''}`);
+    setShowPhoneSuggestions(false);
+    setCustomerPrefilled(true);
+    triggerToast(`Existing customer ${c.name} found! Details auto-populated.`, "success");
+  };
+
   // Typeahead search for existing known vehicle registrations
   const [matchingRegNoList, setMatchingRegNoList] = useState<any[]>([]);
   const [showRegSuggestions, setShowRegSuggestions] = useState(false);
@@ -1725,6 +1795,7 @@ export default function Home() {
   const handleRegNoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const text = e.target.value.toUpperCase();
     setNewCustomerForm(prev => ({ ...prev, regNo: text }));
+    if (customerPrefilled) return;
     if (text.trim().length >= 3) {
       apiFetch(`/vehicles/search?q=${encodeURIComponent(text)}`)
         .then(r => r.ok ? r.json() : [])
@@ -1757,8 +1828,9 @@ export default function Home() {
       regDate: veh.regDate,
       mfgYear: veh.mfgYear
     }));
-    setVehicleSearchText(`${veh.brand} ${veh.model} - ${veh.variant}`);
+    setVehicleSearchText(`${veh.brand} ${veh.model}${veh.variant ? ` - ${veh.variant}` : ''}`);
     setShowRegSuggestions(false);
+    setCustomerPrefilled(true);
     triggerToast(`Existing vehicle ${veh.regNo} found! Customer details auto-populated.`, "success");
   };
 
@@ -1865,6 +1937,11 @@ export default function Home() {
       technician: "Manoj Kumar",
       supervisor: "Anil Dash"
     });
+    setCustomerPrefilled(false);
+    setPhoneMatches([]);
+    setShowPhoneSuggestions(false);
+    setMatchingRegNoList([]);
+    setShowRegSuggestions(false);
     setVehicleSearchText("");
   };
 
@@ -7460,10 +7537,37 @@ export default function Home() {
                             type="tel"
                             required
                             value={newCustomerForm.phone}
-                            onChange={(e) => setNewCustomerForm({ ...newCustomerForm, phone: e.target.value })}
+                            onChange={handlePhoneChange}
+                            onBlur={() => setTimeout(() => setShowPhoneSuggestions(false), 150)}
                             placeholder="98765 43210"
                             className="w-full px-3.5 py-2.5 rounded-r-xl border-y border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-semibold"
+                            autoComplete="off"
                           />
+                          {showPhoneSuggestions && phoneMatches.length > 0 && (
+                            <div className="absolute left-0 top-full mt-1 w-80 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl z-50 overflow-hidden">
+                              <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-700">
+                                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Existing Customers</span>
+                              </div>
+                              {phoneMatches.map((c, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onMouseDown={() => selectPhoneMatch(c)}
+                                  className="w-full text-left px-3 py-2.5 hover:bg-green-50 dark:hover:bg-green-900/20 border-b border-slate-100 dark:border-slate-700/50 last:border-0 transition-colors"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm font-bold text-slate-800 dark:text-white">{c.name}</span>
+                                    <span className="text-xs font-mono text-slate-500">{c.phone}</span>
+                                  </div>
+                                  {c.regNo && (
+                                    <div className="text-[11px] text-slate-400 mt-0.5">
+                                      {c.regNo}{c.brand ? ` · ${c.brand} ${c.model}` : ''}
+                                    </div>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex flex-col">
@@ -7555,7 +7659,9 @@ export default function Home() {
                             type="button"
                             onClick={() => {
                               setEmployeeRoleType("supervisor");
-                              setIsNewEmployeeModalOpen(true);
+                              setEmployeeOpenedFrom("registration");
+                              setEmployeeForm({ workshopId: "Bike Masters", firstName: "", lastName: "", username: "", email: "", contact: "", designation: "Service Advisor", pwdExpiry: "2027-12-31", dob: "", anniversary: "", address: "" });
+                              setIsEmployeeModalOpen(true);
                             }}
                             className="text-[9px] text-green-500 hover:text-green-600 font-bold"
                           >
@@ -7579,7 +7685,9 @@ export default function Home() {
                             type="button"
                             onClick={() => {
                               setEmployeeRoleType("technician");
-                              setIsNewEmployeeModalOpen(true);
+                              setEmployeeOpenedFrom("registration");
+                              setEmployeeForm({ workshopId: "Bike Masters", firstName: "", lastName: "", username: "", email: "", contact: "", designation: "Technician", pwdExpiry: "2027-12-31", dob: "", anniversary: "", address: "" });
+                              setIsEmployeeModalOpen(true);
                             }}
                             className="text-[9px] text-green-500 hover:text-green-600 font-bold"
                           >
@@ -7617,7 +7725,9 @@ export default function Home() {
                           required
                           value={newCustomerForm.regNo}
                           onChange={handleRegNoChange}
+                          onBlur={() => setTimeout(() => setShowRegSuggestions(false), 150)}
                           placeholder="e.g. OD-05-AB-1234"
+                          autoComplete="off"
                           className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all uppercase font-mono font-bold tracking-wider"
                         />
                         {showRegSuggestions && (
@@ -7625,7 +7735,7 @@ export default function Home() {
                             {matchingRegNoList.map((veh, idx) => (
                               <div
                                 key={idx}
-                                onClick={() => selectRegNoSuggestion(veh)}
+                                onMouseDown={() => selectRegNoSuggestion(veh)}
                                 className="p-2.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-xs flex justify-between cursor-pointer border-b border-slate-100 dark:border-slate-800 last:border-b-0"
                               >
                                 <div className="flex flex-col">
@@ -7844,20 +7954,41 @@ export default function Home() {
                 </div>
 
                 {/* Action buttons at bottom */}
-                <div className="p-4 border-t border-slate-200 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900/30 flex items-center justify-end space-x-3.5 shrink-0">
+                <div className="p-4 border-t border-slate-200 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900/30 flex items-center justify-between shrink-0">
                   <button
                     type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-sm hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    onClick={() => {
+                      setNewCustomerForm({
+                        name: "", phone: "", altPhone: "", email: "", address: "", gstin: "",
+                        customerType: "individual", source: "Walk-in", regNo: "", brand: "", model: "",
+                        variant: "", category: "Scooter", plateColor: "white", chassisNo: "", engineNo: "",
+                        odometer: "", regDate: new Date().toISOString().split("T")[0],
+                        mfgYear: new Date().getFullYear().toString(), technician: "Manoj Kumar", supervisor: "Anil Dash"
+                      });
+                      setVehicleSearchText("");
+                      setCustomerPrefilled(false);
+                      setPhoneMatches([]); setShowPhoneSuggestions(false);
+                      setMatchingRegNoList([]); setShowRegSuggestions(false);
+                    }}
+                    className="px-4 py-2.5 rounded-xl border border-orange-200 dark:border-orange-800/60 text-orange-600 dark:text-orange-400 font-bold text-sm hover:bg-orange-50 dark:hover:bg-orange-950/30 transition-colors"
                   >
-                    Cancel
+                    Clear Form
                   </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-sm transition-colors shadow-md shadow-green-600/10 active:scale-95"
-                  >
-                    Register Customer
-                  </button>
+                  <div className="flex items-center space-x-3.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-sm hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-sm transition-colors shadow-md shadow-green-600/10 active:scale-95"
+                    >
+                      Register Customer
+                    </button>
+                  </div>
                 </div>
               </form>
 
@@ -8471,7 +8602,7 @@ export default function Home() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsEmployeeModalOpen(false)}
+                  onClick={() => { setIsEmployeeModalOpen(false); setEmployeeOpenedFrom("manage"); }}
                   className="p-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 transition-colors"
                 >
                   <X className="h-4 w-4" />

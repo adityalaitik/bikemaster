@@ -246,6 +246,14 @@ export class AppController {
   // VEHICLE SEARCH & MASTER DATA
   // ============================================================
 
+  @Get('customers/search')
+  async searchCustomers(
+    @Query('phone') phone?: string,
+    @Query('garageId') garageId?: string,
+  ) {
+    return this.appService.searchCustomersByPhone(phone || '', garageId);
+  }
+
   @Get('vehicles/search')
   async searchVehicles(@Query('q') q?: string) {
     return this.appService.searchVehicles(q || '');
